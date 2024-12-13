@@ -1,4 +1,3 @@
-import threading
 import sounddevice as sd
 import soundfile as sf
 import numpy as np
@@ -9,6 +8,7 @@ import wave
 import os
 import subprocess
 import time
+import logging
 
 # Ensure the environment is correctly configured
 os.environ["LC_ALL"] = "de_DE.UTF-8"
@@ -18,6 +18,8 @@ recording = False
 file_path = "audio_recording.wav"
 audio_data = []
 input_stream = None
+
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
 def start_recording():
     global recording, audio_data, input_stream
@@ -73,9 +75,13 @@ current_keys = set()
 def transcribe_audio(audio_file_path, api_key):
     with wave.open(audio_file_path, 'rb') as wav_file:
         if wav_file.getnchannels() != 1 or wav_file.getsampwidth() != 2 or wav_file.getframerate() != 16000:
+            logging.error("Invalid WAV file format.")
             raise ValueError("Invalid WAV file format.")
 
         audio_data = wav_file.readframes(wav_file.getnframes())
+        if not audio_data:
+            logging.info("No audio data to process.")
+            return ""
 
     audio_content = base64.b64encode(audio_data).decode('utf-8')
     url = f"https://speech.googleapis.com/v1/speech:recognize?key={api_key}"
@@ -90,12 +96,17 @@ def transcribe_audio(audio_file_path, api_key):
         }
     }
 
-    response = requests.post(url, json=request_data)
-    if response.status_code != 200:
-        raise Exception("Failed to transcribe audio.")
+    try:
+        response = requests.post(url, json=request_data, timeout=10)
+        response.raise_for_status()  # This will raise an exception for HTTP errors
+    except requests.RequestException as e:
+        logging.error(f"Failed to transcribe audio: {e}")
+        raise
 
     response_data = response.json()
-    return "".join([result["alternatives"][0]["transcript"] for result in response_data["results"]]) if "results" in response_data else "No transcription found."
+    transcription = "".join([result["alternatives"][0]["transcript"] for result in response_data["results"]]) if "results" in response_data else "No transcription found."
+    logging.info(f"Transcription result: {transcription}")
+    return transcription
 
 def type_text_in_active_window(text):
     time.sleep(0.5)
