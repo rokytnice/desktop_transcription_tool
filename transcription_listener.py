@@ -19,6 +19,8 @@ file_path = "audio_recording.wav"
 audio_data = []
 input_stream = None
 
+samplerate = 16000
+
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
 def start_recording():
@@ -27,7 +29,7 @@ def start_recording():
         print("Recording started...")
         recording = True
         audio_data = []
-        input_stream = sd.InputStream(samplerate=16000, channels=1, dtype='int16', callback=audio_callback)
+        input_stream = sd.InputStream(samplerate=samplerate, channels=1, dtype='int16', callback=audio_callback)
         input_stream.start()
 
 def stop_recording():
@@ -52,7 +54,8 @@ def save_audio():
             return
 
         audio_array = np.concatenate(audio_data, axis=0)
-        sf.write(file_path, audio_array, samplerate=16000, subtype='PCM_16')
+
+        sf.write(file_path, audio_array, samplerate=samplerate, subtype='PCM_16')
         print(f"Audio saved to {file_path}")
     except Exception as e:
         print(f"Error saving audio: {e}")
@@ -74,7 +77,7 @@ current_keys = set()
 
 def transcribe_audio(audio_file_path, api_key):
     with wave.open(audio_file_path, 'rb') as wav_file:
-        if wav_file.getnchannels() != 1 or wav_file.getsampwidth() != 2 or wav_file.getframerate() != 16000:
+        if wav_file.getnchannels() != 1 or wav_file.getsampwidth() != 2 or wav_file.getframerate() != samplerate:
             logging.error("Invalid WAV file format.")
             raise ValueError("Invalid WAV file format.")
 
@@ -89,7 +92,8 @@ def transcribe_audio(audio_file_path, api_key):
         "config": {
             "encoding": "LINEAR16",
             "sampleRateHertz": 16000,
-            "languageCode": "de-DE"
+            "languageCode": "de-DE",
+            "enable_automatic_punctuation": "True",
         },
         "audio": {
             "content": audio_content
@@ -109,9 +113,14 @@ def transcribe_audio(audio_file_path, api_key):
     return transcription
 
 def type_text_in_active_window(text):
-    time.sleep(0.5)
-    subprocess.run(["xdotool", "type", text], check=True)
-    subprocess.run(["xdotool", "key", "Return"], check=True)
+    time.sleep(0.5)  # Allow some buffer time for active window focus
+    try:
+        for char in text:
+            subprocess.run(["xdotool", "type", char], check=True)
+        subprocess.run(["xdotool", "key", "Return"], check=True)
+    except subprocess.CalledProcessError as e:
+        print(f"Error typing text: {e}")
+
 
 def transcribe_and_output():
     api_key = os.getenv("GOOGLE_API_KEY")
@@ -119,13 +128,25 @@ def transcribe_and_output():
         print("GOOGLE_API_KEY environment variable is not set.")
         return
 
+    if not os.path.exists(file_path) or os.path.getsize(file_path) == 0:
+        print("Audio file is empty or does not exist. No content to process.")
+        return
+
     try:
         transcription = transcribe_audio(file_path, api_key)
         print("Transcription:")
         print(transcription)
-        type_text_in_active_window(transcription)
+
+        # Ensure transcription is fully processed
+        time.sleep(0.5)  # Optional: Add delay if needed for processing
+        if transcription:
+            type_text_in_active_window(transcription)
+        else:
+            print("No transcription generated.")
     except Exception as e:
         print(f"An error occurred: {e}")
+
+
 
 if __name__ == "__main__":
     print("Hold Ctrl + Alt to start recording. Release to stop recording and transcribe.")
