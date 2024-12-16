@@ -153,24 +153,24 @@ def transcribe_and_output():
         print("GOOGLE_API_KEY environment variable is not set.")
         return
 
+    # Überprüfen, ob die Audiodatei existiert und nicht leer ist
     if not os.path.exists(file_path) or os.path.getsize(file_path) == 0:
-        print("Audio file is empty or does not exist. No content to process.")
+        logging.info("Audio file is empty or does not exist. Skipping transcription.")
         return
 
     try:
         transcription = transcribe_audio(file_path, api_key)
-        print("Transcription:")
-        print(transcription)
 
-        # Ensure transcription is fully processed
-        time.sleep(0.5)  # Optional: Add delay if needed for processing
-        if transcription:
-            type_text_in_active_window(transcription)
-        else:
-            print("No transcription generated.")
+        # Wenn keine Transkription gefunden wurde, nichts ausgeben
+        if not transcription or transcription.strip() == "No transcription found.":
+            logging.info("No valid transcription generated. Skipping output.")
+            return
+
+        # Transkription ausgeben und ins aktive Fenster eingeben
+        logging.info(f"Transcription: {transcription}")
+        type_text_in_active_window(transcription)
     except Exception as e:
-        print(f"An error occurred: {e}")
-
+        logging.error(f"An error occurred during transcription: {e}")
 
 
 if __name__ == "__main__":
