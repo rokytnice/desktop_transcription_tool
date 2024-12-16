@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import sounddevice as sd
 import soundfile as sf
 import numpy as np
@@ -21,7 +23,28 @@ input_stream = None
 
 samplerate = 16000
 
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+# Logger erstellen
+logger = logging.getLogger()
+logger.setLevel(logging.DEBUG)
+
+# Ausgabe in eine Datei
+file_handler = logging.FileHandler('transcription_listener.log')
+file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+logger.addHandler(file_handler)
+
+# Ausgabe in die Konsole
+console_handler = logging.StreamHandler()
+console_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+logger.addHandler(console_handler)
+
+
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    filename='/var/log/transcription_listener.log',
+    filemode='a'  # 'a' für Anhängen, 'w' für Überschreiben bei jedem Start
+)
+
 
 def start_recording():
     global recording, audio_data, input_stream
@@ -113,11 +136,13 @@ def transcribe_audio(audio_file_path, api_key):
     return transcription
 
 def type_text_in_active_window(text):
-    time.sleep(0.5)  # Allow some buffer time for active window focus
+    time.sleep(0.5)  # Wartezeit für den Fokus auf das aktive Fenster
     try:
         for char in text:
-            subprocess.run(["xdotool", "type", char], check=True)
-        subprocess.run(["xdotool", "key", "Return"], check=True)
+            if ord(char) > 127:  # Nicht-ASCII-Zeichen
+                subprocess.run(["xdotool", "key", f"U{ord(char):04x}"], check=True)
+            else:
+                subprocess.run(["xdotool", "type", char], check=True)
     except subprocess.CalledProcessError as e:
         print(f"Error typing text: {e}")
 
