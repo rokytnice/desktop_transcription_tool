@@ -4,9 +4,9 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="9f975d2f-2bd4-4e94-87f3-1bf0f0aa103d" name="Changes" comment="add libs &amp; readme">
+    <list default="true" id="9f975d2f-2bd4-4e94-87f3-1bf0f0aa103d" name="Changes" comment="empty output">
+      <change afterPath="$PROJECT_DIR$/transcription_listener_whisper.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/transcription_listener.py" beforeDir="false" afterPath="$PROJECT_DIR$/transcription_listener.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -23,18 +23,18 @@
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
-  <component name="GitHubPullRequestSearchHistory"><![CDATA[{
-  "lastFilter": {
-    "state": "OPEN",
-    "assignee": "rokytnice"
+  <component name="GitHubPullRequestSearchHistory">{
+  &quot;lastFilter&quot;: {
+    &quot;state&quot;: &quot;OPEN&quot;,
+    &quot;assignee&quot;: &quot;rokytnice&quot;
   }
-}]]></component>
-  <component name="GithubPullRequestsUISettings"><![CDATA[{
-  "selectedUrlAndAccountId": {
-    "url": "https://github.com/rokytnice/desktop_transcription_tool",
-    "accountId": "3c5fbcfe-de9b-4fb6-8f8f-54a74fabb657"
+}</component>
+  <component name="GithubPullRequestsUISettings">{
+  &quot;selectedUrlAndAccountId&quot;: {
+    &quot;url&quot;: &quot;https://github.com/rokytnice/desktop_transcription_tool&quot;,
+    &quot;accountId&quot;: &quot;3c5fbcfe-de9b-4fb6-8f8f-54a74fabb657&quot;
   }
-}]]></component>
+}</component>
   <component name="ProjectColorInfo">{
   &quot;associatedIndex&quot;: 1
 }</component>
@@ -44,24 +44,29 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent"><![CDATA[{
-  "keyToString": {
-    "Python.Whisper.executor": "Run",
-    "Python.transcription_listener.executor": "Run",
-    "Python.whisper_transcribe.executor": "Run",
-    "RunOnceActivity.ShowReadmeOnStart": "true",
-    "RunOnceActivity.git.unshallow": "true",
-    "git-widget-placeholder": "master",
-    "last_opened_file_path": "/home/andre/PycharmProjects/audioTranscription",
-    "node.js.detected.package.eslint": "true",
-    "node.js.detected.package.tslint": "true",
-    "node.js.selected.package.eslint": "(autodetect)",
-    "node.js.selected.package.tslint": "(autodetect)",
-    "nodejs_package_manager_path": "npm",
-    "settings.editor.selected.configurable": "org.jetbrains.plugins.github.ui.GithubSettingsConfigurable",
-    "vue.rearranger.settings.migration": "true"
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;Python.Whisper.executor&quot;: &quot;Run&quot;,
+    &quot;Python.transcription_listener.executor&quot;: &quot;Run&quot;,
+    &quot;Python.whisper_transcribe.executor&quot;: &quot;Run&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;master&quot;,
+    &quot;last_opened_file_path&quot;: &quot;/home/andre/PycharmProjects/audioTranscription&quot;,
+    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
+    &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
+    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
+    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
+    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
+    &quot;settings.editor.selected.configurable&quot;: &quot;org.jetbrains.plugins.github.ui.GithubSettingsConfigurable&quot;,
+    &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
   }
-}]]></component>
+}</component>
+  <component name="RecentsManager">
+    <key name="CopyFile.RECENT_KEYS">
+      <recent name="$PROJECT_DIR$" />
+    </key>
+  </component>
   <component name="RunManager" selected="Python.transcription_listener">
     <configuration default="true" type="PyBehaveRunConfigurationType" factoryName="Behave">
       <module name="transcription" />
@@ -123,6 +128,10 @@
       <option name="INPUT_FILE" value="" />
       <method v="2" />
     </configuration>
+    <list>
+      <item itemvalue="Python.transcription_listener" />
+      <item itemvalue="Python.whisper_transcribe" />
+    </list>
     <recent_temporary>
       <list>
         <item itemvalue="Python.transcription_listener" />
@@ -149,6 +158,9 @@
       <workItem from="1733725554315" duration="3718000" />
       <workItem from="1734082920734" duration="536000" />
       <workItem from="1734083515421" duration="5353000" />
+      <workItem from="1734346940109" duration="1302000" />
+      <workItem from="1734348254883" duration="1771000" />
+      <workItem from="1734445328448" duration="2253000" />
     </task>
     <task id="LOCAL-00001" summary="add libs &amp; readme">
       <option name="closed" value="true" />
