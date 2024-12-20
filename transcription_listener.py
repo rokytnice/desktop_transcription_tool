@@ -1,166 +1,179 @@
-import os
-import json
-import logging
-import requests
-import difflib
-import time
-from pathlib import Path
-from typing import List, Dict
-from threading import Thread
+#!/usr/bin/env python3
 
-# Konfiguration für Logging
+import sounddevice as sd
+import soundfile as sf
+import numpy as np
+from pynput import keyboard
+import requests
+import base64
+import wave
+import os
+import subprocess
+import time
+import logging
+
+# Ensure the environment is correctly configured
+os.environ["LC_ALL"] = "de_DE.UTF-8"
+os.environ["LANG"] = "de_DE.UTF-8"
+
+recording = False
+file_path = "audio_recording.wav"
+audio_data = []
+input_stream = None
+
+samplerate = 16000
+
+# Logger erstellen
+logger = logging.getLogger()
+logger.setLevel(logging.DEBUG)
+
+# Ausgabe in eine Datei
+file_handler = logging.FileHandler('transcription_listener.log')
+file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+logger.addHandler(file_handler)
+
+# Ausgabe in die Konsole
+console_handler = logging.StreamHandler()
+console_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+logger.addHandler(console_handler)
+
+
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,
     format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler("app.log"),
-        logging.StreamHandler()
-    ]
+    filename='/var/log/transcription_listener.log',
+    filemode='a'  # 'a' für Anhängen, 'w' für Überschreiben bei jedem Start
 )
 
-API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
 
-class APIClient:
-    def __init__(self, api_key: str):
-        self.api_key = api_key
+def start_recording():
+    global recording, audio_data, input_stream
+    if not recording:
+        print("Recording started...")
+        recording = True
+        audio_data = []
+        input_stream = sd.InputStream(samplerate=samplerate, channels=1, dtype='int16', callback=audio_callback)
+        input_stream.start()
 
-    def send_prompt(self, prompt: str) -> Dict:
-        headers = {'Content-Type': 'application/json'}
-        payload = {
-            "contents": [{
-                "parts": [{"text": prompt}]
-            }]
-        }
-        logging.info(f"Sending API request with payload: {json.dumps(payload)}")
+def stop_recording():
+    global recording, input_stream
+    if recording:
+        print("Recording stopped. Saving file...")
+        recording = False
+        input_stream.stop()
+        input_stream.close()
+        save_audio()
+        transcribe_and_output()
 
-        # Start progress indicator in a separate thread
-        progress_thread = Thread(target=self.show_progress, daemon=True)
-        progress_thread.start()
+def audio_callback(indata, frames, time, status):
+    if recording:
+        audio_data.append(indata.copy())
 
-        try:
-            response = requests.post(f"{API_URL}?key={self.api_key}", headers=headers, json=payload)
-            response.raise_for_status()
-            logging.info(f"Received API response: {response.text}")
-            return response.json()
-        finally:
-            # Stop the progress indicator
-            self.stop_progress = True
-            progress_thread.join()
-
-    def show_progress(self):
-        self.stop_progress = False
-        symbols = [".", "..", "..."]
-        idx = 0
-        while not self.stop_progress:
-            print(f"Waiting for API response{symbols[idx % len(symbols)]}", end="\r")
-            idx += 1
-            time.sleep(0.5)
-
-class FileManager:
-    def __init__(self, base_directory: Path):
-        self.base_directory = base_directory
-
-    def find_files(self, patterns: List[str]) -> List[Path]:
-        files = []
-        for pattern in patterns:
-            files.extend(self.base_directory.rglob(pattern))
-        logging.info(f"Files matching patterns {patterns}: {files}")
-        return files
-
-    def read_file_content(self, file_path: Path) -> str:
-        logging.info(f"Reading content from file: {file_path}")
-        return file_path.read_text(encoding='utf-8')
-
-    def write_file_content(self, file_path: Path, content: str):
-        if not file_path.parent.exists():
-            logging.info(f"Creating directories for path: {file_path.parent}")
-            file_path.parent.mkdir(parents=True, exist_ok=True)
-        old_content = file_path.read_text(encoding='utf-8') if file_path.exists() else ""
-        file_path.write_text(content, encoding='utf-8')
-        logging.info(f"File written: {file_path}")
-        self.log_diff(file_path, old_content, content)
-
-    def log_diff(self, file_path: Path, old_content: str, new_content: str):
-        if old_content != new_content:
-            logging.info(f"Changes in file {file_path}:")
-            diff = difflib.unified_diff(
-                old_content.splitlines(),
-                new_content.splitlines(),
-                fromfile="Old Content",
-                tofile="New Content",
-                lineterm=""
-            )
-            for line in diff:
-                logging.info(line)
-
-class PromptProcessor:
-    def __init__(self, file_manager: FileManager):
-        self.file_manager = file_manager
-
-    def build_prompt(self, base_prompt: str, paths: List[Path], patterns: List[str] = ["*"]) -> str:
-        prompt = base_prompt
-        for path in paths:
-            if path.is_dir():
-                files = self.file_manager.find_files(patterns)
-                for file in files:
-                    content = self.file_manager.read_file_content(file)
-                    prompt += f"\n\n---\n{file}:{content}"  # Dateiinhalt hinzufügen
-            elif path.is_file():
-                content = self.file_manager.read_file_content(path)
-                prompt += f"\n\n---\n{path}:{content}"
-        logging.info(f"Constructed prompt: {prompt}")
-        return prompt
-
-class ResponseHandler:
-    def __init__(self, file_manager: FileManager):
-        self.file_manager = file_manager
-
-    def process_response(self, response: Dict):
-        candidates = response.get("candidates", [])
-        for candidate in candidates:
-            parts = candidate.get("content", {}).get("parts", [])
-            for part in parts:
-                if "```java" in part["text"]:
-                    java_content = self.extract_code(part["text"], "java")
-                    if java_content:
-                        self.update_files(java_content)
-
-    def extract_code(self, text: str, language: str) -> str:
-        start_tag = f"```{language}"
-        end_tag = "```"
-        start = text.find(start_tag) + len(start_tag)
-        end = text.find(end_tag, start)
-        return text[start:end].strip() if start_tag in text and end > start else ""
-
-    def update_files(self, content: str):
-        # Extract file name and content
-        lines = content.splitlines()
-        if lines:
-            file_name = lines[0].strip()
-            file_content = "\n".join(lines[1:])
-            file_path = self.file_manager.base_directory / file_name
-            self.file_manager.write_file_content(file_path, file_content)
-
-# Hauptprogramm
-if __name__ == "__main__":
-    api_key = os.getenv("GEMINI_API_KEY")
-    if not api_key:
-        raise EnvironmentError("API key is missing. Set GEMINI_API_KEY as an environment variable.")
-
-    base_directory = Path("/home/andre/IdeaProjects/algosec-connector")
-    file_manager = FileManager(base_directory)
-    prompt_processor = PromptProcessor(file_manager)
-    api_client = APIClient(api_key)
-    response_handler = ResponseHandler(file_manager)
-
-    # Beispiel-Aufruf
-    paths = [base_directory]
-    base_prompt = "Aktualisiere CustomAuthenticationFailureHandler.java Java-Klasse Füge eine error code hinzu."
-    patterns = ["*.java", "*.md"]  # Beispiel für Glob-Muster
-
-    constructed_prompt = prompt_processor.build_prompt(base_prompt, paths, patterns)
+def save_audio():
+    global audio_data
     try:
-        response = api_client.send_prompt(constructed_prompt)
-        response_handler.process_response(response)
+        if len(audio_data) == 0:
+            print("No audio data to save.")
+            return
+
+        audio_array = np.concatenate(audio_data, axis=0)
+
+        sf.write(file_path, audio_array, samplerate=samplerate, subtype='PCM_16')
+        print(f"Audio saved to {file_path}")
     except Exception as e:
-        logging.error(f"Error occurred: {e}")
+        print(f"Error saving audio: {e}")
+
+def on_press(key):
+    global current_keys
+    current_keys.add(key)
+    if keyboard.Key.ctrl_l in current_keys and keyboard.Key.alt_l in current_keys:
+        start_recording()
+
+def on_release(key):
+    global current_keys
+    if key in current_keys:
+        current_keys.remove(key)
+    if keyboard.Key.ctrl_l not in current_keys or keyboard.Key.alt_l not in current_keys:
+        stop_recording()
+
+current_keys = set()
+
+def transcribe_audio(audio_file_path, api_key):
+    with wave.open(audio_file_path, 'rb') as wav_file:
+        if wav_file.getnchannels() != 1 or wav_file.getsampwidth() != 2 or wav_file.getframerate() != samplerate:
+            logging.error("Invalid WAV file format.")
+            raise ValueError("Invalid WAV file format.")
+
+        audio_data = wav_file.readframes(wav_file.getnframes())
+        if not audio_data:
+            logging.info("No audio data to process.")
+            return ""
+
+    audio_content = base64.b64encode(audio_data).decode('utf-8')
+    url = f"https://speech.googleapis.com/v1/speech:recognize?key={api_key}"
+    request_data = {
+        "config": {
+            "encoding": "LINEAR16",
+            "sampleRateHertz": 16000,
+            "languageCode": "de-DE",
+            "enable_automatic_punctuation": "True",
+        },
+        "audio": {
+            "content": audio_content
+        }
+    }
+
+    try:
+        response = requests.post(url, json=request_data, timeout=10)
+        response.raise_for_status()  # This will raise an exception for HTTP errors
+    except requests.RequestException as e:
+        logging.error(f"Failed to transcribe audio: {e}")
+        raise
+
+    response_data = response.json()
+    transcription = "".join([result["alternatives"][0]["transcript"] for result in response_data["results"]]) if "results" in response_data else "No transcription found."
+    logging.info(f"Transcription result: {transcription}")
+    return transcription
+
+def type_text_in_active_window(text):
+    time.sleep(0.5)  # Wartezeit für den Fokus auf das aktive Fenster
+    try:
+        for char in text:
+            if ord(char) > 127:  # Nicht-ASCII-Zeichen
+                subprocess.run(["xdotool", "key", f"U{ord(char):04x}"], check=True)
+            else:
+                subprocess.run(["xdotool", "type", char], check=True)
+    except subprocess.CalledProcessError as e:
+        print(f"Error typing text: {e}")
+
+
+def transcribe_and_output():
+    api_key = os.getenv("GOOGLE_API_KEY")
+    if not api_key:
+        print("GOOGLE_API_KEY environment variable is not set.")
+        return
+
+    if not os.path.exists(file_path) or os.path.getsize(file_path) == 0:
+        print("Audio file is empty or does not exist. No content to process.")
+        return
+
+    try:
+        transcription = transcribe_audio(file_path, api_key)
+        print("Transcription:")
+        print(transcription)
+
+        # Ensure transcription is fully processed
+        time.sleep(0.5)  # Optional: Add delay if needed for processing
+        if transcription:
+            type_text_in_active_window(transcription)
+        else:
+            print("No transcription generated.")
+    except Exception as e:
+        print(f"An error occurred: {e}")
+
+
+
+if __name__ == "__main__":
+    print("Hold Ctrl + Alt to start recording. Release to stop recording and transcribe.")
+    with keyboard.Listener(on_press=on_press, on_release=on_release) as listener:
+        listener.join()
