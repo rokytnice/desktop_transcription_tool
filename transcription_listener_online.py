@@ -4,11 +4,13 @@ import sounddevice as sd
 import soundfile as sf
 import numpy as np
 from pynput import keyboard
+import requests
+import base64
+import wave
 import os
 import subprocess
 import time
 import logging
-import whisper
 
 # Ensure the environment is correctly configured
 os.environ["LC_ALL"] = "de_DE.UTF-8"
@@ -34,8 +36,6 @@ logger.addHandler(file_handler)
 console_handler = logging.StreamHandler()
 console_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
 logger.addHandler(console_handler)
-
-current_keys = set()
 
 
 logging.basicConfig(
@@ -86,46 +86,54 @@ def save_audio():
 def on_press(key):
     global current_keys
     current_keys.add(key)
-    if keyboard.Key.ctrl_l in current_keys and keyboard.Key.alt_l in current_keys and keyboard.Key.insert in current_keys:
+    if keyboard.Key.ctrl_l in current_keys and keyboard.Key.alt_l in current_keys:
         start_recording()
 
 def on_release(key):
     global current_keys
     if key in current_keys:
         current_keys.remove(key)
-    if keyboard.Key.ctrl_l not in current_keys and keyboard.Key.alt_l  not in current_keys and keyboard.Key.insert  not in current_keys:
+    if keyboard.Key.ctrl_l not in current_keys or keyboard.Key.alt_l not in current_keys:
         stop_recording()
 
+current_keys = set()
 
-def transcribe_with_whisper(audio_file_path):
+def transcribe_audio(audio_file_path, api_key):
+    with wave.open(audio_file_path, 'rb') as wav_file:
+        if wav_file.getnchannels() != 1 or wav_file.getsampwidth() != 2 or wav_file.getframerate() != samplerate:
+            logging.error("Invalid WAV file format.")
+            raise ValueError("Invalid WAV file format.")
+
+        audio_data = wav_file.readframes(wav_file.getnframes())
+        if not audio_data:
+            logging.info("No audio data to process.")
+            return ""
+
+    audio_content = base64.b64encode(audio_data).decode('utf-8')
+    url = f"https://speech.googleapis.com/v1/speech:recognize?key={api_key}"
+    request_data = {
+        "config": {
+            "encoding": "LINEAR16",
+            "sampleRateHertz": 16000,
+            "languageCode": "de-DE",
+            "enable_automatic_punctuation": "True",
+        },
+        "audio": {
+            "content": audio_content
+        }
+    }
+
     try:
-        model = whisper.load_model("turbo")
-        result = model.transcribe(audio_file_path, language="de")
-        transcription = result["text"]
-        logging.info(f"Transcription result: {transcription}")
-
-        return transcription
-
-        # model = whisper.load_model("turbo")
-        #
-        # # load audio and pad/trim it to fit 30 seconds
-        # audio = whisper.load_audio(audio_file_path)
-        # audio = whisper.pad_or_trim(audio)
-        #
-        # # make log-Mel spectrogram and move to the same device as the model
-        # mel = whisper.log_mel_spectrogram(audio, n_mels=model.dims.n_mels).to(model.device)
-        #
-        # # detect the spoken language
-        # _, probs = model.detect_language(mel)
-        # print(f"Detected language: {max(probs, key=probs.get)}")
-        #
-        # # decode the audio
-        # options = whisper.DecodingOptions()
-        # result = whisper.decode(model, mel, options)
-        # print(f"Result: result={result.text}")
-    except Exception as e:
-        logging.error(f"Failed to transcribe audio with Whisper: {e}")
+        response = requests.post(url, json=request_data, timeout=10)
+        response.raise_for_status()  # This will raise an exception for HTTP errors
+    except requests.RequestException as e:
+        logging.error(f"Failed to transcribe audio: {e}")
         raise
+
+    response_data = response.json()
+    transcription = "".join([result["alternatives"][0]["transcript"] for result in response_data["results"]]) if "results" in response_data else "No transcription found."
+    logging.info(f"Transcription result: {transcription}")
+    return transcription
 
 def type_text_in_active_window(text):
     time.sleep(0.5)  # Wartezeit für den Fokus auf das aktive Fenster
@@ -140,29 +148,32 @@ def type_text_in_active_window(text):
 
 
 def transcribe_and_output():
+    api_key = os.getenv("API_KEY")
+    if not api_key:
+        print("API_KEY environment variable is not set.")
+        return
+
+    if not os.path.exists(file_path) or os.path.getsize(file_path) == 0:
+        print("Audio file is empty or does not exist. No content to process.")
+        return
+
     try:
-        # Hinweis auf Start der Transkription
-        print("Starting transcription...")
-        logging.info("Starting transcription...")
+        transcription = transcribe_audio(file_path, api_key)
+        print("Transcription:")
+        print(transcription)
 
-        transcription = transcribe_with_whisper(file_path)
-
-        if not transcription or transcription.strip() == "":
-            print("No valid transcription found.")
-            logging.info("No valid transcription generated.")
-            return
-
-        # Transkription ausgeben und ins aktive Fenster eingeben
-        print(f"Transcription: {transcription}")
-        logging.info(f"Transcription: {transcription}")
-        type_text_in_active_window(transcription)
+        # Ensure transcription is fully processed
+        time.sleep(0.5)  # Optional: Add delay if needed for processing
+        if transcription:
+            type_text_in_active_window(transcription)
+        else:
+            print("No transcription generated.")
     except Exception as e:
-        logging.error(f"An error occurred during transcription: {e}")
-        print(f"An error occurred during transcription: {e}")
+        print(f"An error occurred: {e}")
 
 
 
 if __name__ == "__main__":
-    print("Hold Ctrl + Alt + Einfg to start recording. Release to stop recording and transcribe.")
+    print("Hold Ctrl + Alt to start recording. Release to stop recording and transcribe.")
     with keyboard.Listener(on_press=on_press, on_release=on_release) as listener:
         listener.join()

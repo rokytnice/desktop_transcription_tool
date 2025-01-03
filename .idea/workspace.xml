@@ -5,8 +5,9 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="9f975d2f-2bd4-4e94-87f3-1bf0f0aa103d" name="Changes" comment="empty output">
-      <change afterPath="$PROJECT_DIR$/transcription_listener_whisper.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/transcription_listener.py" beforeDir="false" afterPath="$PROJECT_DIR$/transcription_listener_online.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/transcription_listener_whisper.py" beforeDir="false" afterPath="$PROJECT_DIR$/transcription_listener_offline.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -67,7 +68,7 @@
       <recent name="$PROJECT_DIR$" />
     </key>
   </component>
-  <component name="RunManager" selected="Python.transcription_listener">
+  <component name="RunManager" selected="Python.transcription_listener_online">
     <configuration default="true" type="PyBehaveRunConfigurationType" factoryName="Behave">
       <module name="transcription" />
       <option name="ENV_FILES" value="" />
@@ -82,7 +83,7 @@
       <option name="ADDITIONAL_ARGS" value="" />
       <method v="2" />
     </configuration>
-    <configuration name="transcription_listener" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
+    <configuration name="transcription_listener_online" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
       <module name="transcription" />
       <option name="ENV_FILES" value="" />
       <option name="INTERPRETER_OPTIONS" value="" />
@@ -96,7 +97,7 @@
       <option name="ADD_CONTENT_ROOTS" value="true" />
       <option name="ADD_SOURCE_ROOTS" value="true" />
       <EXTENSION ID="PythonCoverageRunConfigurationExtension" runner="coverage.py" />
-      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/transcription_listener.py" />
+      <option name="SCRIPT_NAME" value="$PROJECT_DIR$/transcription_listener_online.py" />
       <option name="PARAMETERS" value="" />
       <option name="SHOW_COMMAND_LINE" value="false" />
       <option name="EMULATE_TERMINAL" value="false" />
@@ -129,12 +130,12 @@
       <method v="2" />
     </configuration>
     <list>
-      <item itemvalue="Python.transcription_listener" />
       <item itemvalue="Python.whisper_transcribe" />
+      <item itemvalue="Python.transcription_listener_online" />
     </list>
     <recent_temporary>
       <list>
-        <item itemvalue="Python.transcription_listener" />
+        <item itemvalue="Python.transcription_listener_online" />
         <item itemvalue="Python.whisper_transcribe" />
       </list>
     </recent_temporary>
@@ -161,6 +162,7 @@
       <workItem from="1734346940109" duration="1302000" />
       <workItem from="1734348254883" duration="1771000" />
       <workItem from="1734445328448" duration="2253000" />
+      <workItem from="1735888652842" duration="3951000" />
     </task>
     <task id="LOCAL-00001" summary="add libs &amp; readme">
       <option name="closed" value="true" />
