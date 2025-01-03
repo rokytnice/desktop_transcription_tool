@@ -130,8 +130,8 @@
       <method v="2" />
     </configuration>
     <list>
-      <item itemvalue="Python.whisper_transcribe" />
       <item itemvalue="Python.transcription_listener_online" />
+      <item itemvalue="Python.whisper_transcribe" />
     </list>
     <recent_temporary>
       <list>

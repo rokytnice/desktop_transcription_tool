@@ -9,6 +9,7 @@ import subprocess
 import time
 import logging
 import whisper
+import torch
 
 # Ensure the environment is correctly configured
 os.environ["LC_ALL"] = "de_DE.UTF-8"
@@ -100,10 +101,9 @@ def on_release(key):
 def transcribe_with_whisper(audio_file_path):
     try:
         model = whisper.load_model("tiny")
-        # model = torch.quantization.quantize_dynamic(
-        #     model, {torch.nn.Linear}, dtype=torch.qint8
-        # )
-        # result = model.transcribe(audio_file_path, language="de")
+        model = torch.quantization.quantize_dynamic(
+            model, {torch.nn.Linear}, dtype=torch.qint8
+        )
         result = model.transcribe(audio_file_path,  fp16=True, language="de", task="transcribe")
 
         transcription = result["text"]
