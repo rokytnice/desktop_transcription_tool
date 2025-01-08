@@ -168,6 +168,8 @@ def transcribe_and_output():
 
 
 if __name__ == "__main__":
+
+    #print("GPU available: " + torch.cuda.is_available())  # True bedeutet, GPU wird erkannt
     print("Hold Ctrl + Alt + Einfg to start recording. Release to stop recording and transcribe.")
     with keyboard.Listener(on_press=on_press, on_release=on_release) as listener:
         listener.join()
