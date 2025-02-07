@@ -100,7 +100,7 @@ def on_release(key):
 
 def transcribe_with_whisper(audio_file_path):
     try:
-        model = whisper.load_model("tiny")
+        model = whisper.load_model("base")
         model = torch.quantization.quantize_dynamic(
             model, {torch.nn.Linear}, dtype=torch.qint8
         )
