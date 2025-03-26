@@ -84,21 +84,23 @@ def save_audio():
     except Exception as e:
         print(f"Error saving audio: {e}")
 
+
 def on_press(key):
     global current_keys
     current_keys.add(key)
-    #if keyboard.Key.ctrl_l in current_keys and keyboard.Key.alt_l in current_keys and keyboard.Key.insert in current_keys:
-    if keyboard.Key.ctrl_l in current_keys: # Changed to Ctrl key only
+
+    if (keyboard.Key.ctrl_l in current_keys or keyboard.Key.ctrl_r in current_keys) and \
+       (keyboard.Key.alt_l in current_keys or keyboard.Key.alt_r in current_keys):
         start_recording()
 
 def on_release(key):
     global current_keys
     if key in current_keys:
         current_keys.remove(key)
-    #if keyboard.Key.ctrl_l not in current_keys and keyboard.Key.alt_l  not in current_keys and keyboard.Key.insert  not in current_keys:
-    if keyboard.Key.ctrl_l not in current_keys:  # Changed to Ctrl key only
-        stop_recording()
 
+    if not ((keyboard.Key.ctrl_l in current_keys or keyboard.Key.ctrl_r in current_keys) and \
+            (keyboard.Key.alt_l in current_keys or keyboard.Key.alt_r in current_keys)):
+        stop_recording()
 
 def transcribe_with_whisper(audio_file_path):
     try:
@@ -113,23 +115,6 @@ def transcribe_with_whisper(audio_file_path):
 
         return transcription
 
-        # model = whisper.load_model("turbo")
-        #
-        # # load audio and pad/trim it to fit 30 seconds
-        # audio = whisper.load_audio(audio_file_path)
-        # audio = whisper.pad_or_trim(audio)
-        #
-        # # make log-Mel spectrogram and move to the same device as the model
-        # mel = whisper.log_mel_spectrogram(audio, n_mels=model.dims.n_mels).to(model.device)
-        #
-        # # detect the spoken language
-        # _, probs = model.detect_language(mel)
-        # print(f"Detected language: {max(probs, key=probs.get)}")
-        #
-        # # decode the audio
-        # options = whisper.DecodingOptions()
-        # result = whisper.decode(model, mel, options)
-        # print(f"Result: result={result.text}")
     except Exception as e:
         logging.error(f"Failed to transcribe audio with Whisper: {e}")
         raise
@@ -171,8 +156,6 @@ def transcribe_and_output():
 
 if __name__ == "__main__":
 
-    #print("GPU available: " + torch.cuda.is_available())  # True bedeutet, GPU wird erkannt
-    #print("Hold Ctrl + Alt + Einfg to start recording. Release to stop recording and transcribe.")
-    print("Hold Ctrl to start recording. Release to stop recording and transcribe.") # Updated prompt
+    print("Hold Ctrl + Alt to start recording. Release to stop recording and transcribe.")
     with keyboard.Listener(on_press=on_press, on_release=on_release) as listener:
         listener.join()
