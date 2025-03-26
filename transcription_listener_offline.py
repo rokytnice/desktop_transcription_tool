@@ -87,14 +87,16 @@ def save_audio():
 def on_press(key):
     global current_keys
     current_keys.add(key)
-    if keyboard.Key.ctrl_l in current_keys and keyboard.Key.alt_l in current_keys and keyboard.Key.insert in current_keys:
+    #if keyboard.Key.ctrl_l in current_keys and keyboard.Key.alt_l in current_keys and keyboard.Key.insert in current_keys:
+    if keyboard.Key.ctrl_l in current_keys: # Changed to Ctrl key only
         start_recording()
 
 def on_release(key):
     global current_keys
     if key in current_keys:
         current_keys.remove(key)
-    if keyboard.Key.ctrl_l not in current_keys and keyboard.Key.alt_l  not in current_keys and keyboard.Key.insert  not in current_keys:
+    #if keyboard.Key.ctrl_l not in current_keys and keyboard.Key.alt_l  not in current_keys and keyboard.Key.insert  not in current_keys:
+    if keyboard.Key.ctrl_l not in current_keys:  # Changed to Ctrl key only
         stop_recording()
 
 
@@ -170,6 +172,7 @@ def transcribe_and_output():
 if __name__ == "__main__":
 
     #print("GPU available: " + torch.cuda.is_available())  # True bedeutet, GPU wird erkannt
-    print("Hold Ctrl + Alt + Einfg to start recording. Release to stop recording and transcribe.")
+    #print("Hold Ctrl + Alt + Einfg to start recording. Release to stop recording and transcribe.")
+    print("Hold Ctrl to start recording. Release to stop recording and transcribe.") # Updated prompt
     with keyboard.Listener(on_press=on_press, on_release=on_release) as listener:
         listener.join()
