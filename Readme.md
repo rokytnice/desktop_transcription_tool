@@ -18,7 +18,7 @@ You need python 3 and google API Key to use google transcription web service.
  pip install 
  python3 transcription_listener.py 
  pip install --upgrade pip
- python3 -m venv myenv
+ python3 -m venv .venv
  source myenv/bin/activate
  pip install -r requirements.txt
  pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
