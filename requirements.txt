@@ -43,3 +43,6 @@ PyGetWindow~=0.0.9
 PyAutoGUI~=0.9.54
 PyRect~=0.2.0
 openai-whisper~=20240930
+soundcard
+numpy
+google-generativeai
