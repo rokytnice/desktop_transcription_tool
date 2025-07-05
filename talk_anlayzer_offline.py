@@ -10,19 +10,23 @@ import os
 import time
 from queue import Queue, Empty
 import google.generativeai as genai
-import argparse
+from pynput import keyboard
+# NEU: Bibliothek für farbige Terminal-Ausgaben
+import colorama
+from colorama import Fore, Style
 
 
 class SpeakerTranscriber:
     """
     Eine Klasse, die Audio von Lautsprecher und Mikrofon GLEICHZEITIG
-    in Echtzeit abhört, Pausen erkennt, das Audio transkribiert und eine
-    Antwort von einem LLM generiert.
+    in Echtzeit abhört, Pausen erkennt (automatisch oder manuell per Strg-Doppelklick)
+    und eine Antwort von einem LLM generiert.
     """
 
     def __init__(self, model_size="base", lang="de",
                  speaker_pause_seconds=2.0, mic_pause_seconds=1.5,
-                 silence_threshold=0.01, llm_model_name="gemini-1.5-flash-latest"):
+                 silence_threshold=0.01, llm_model_name="gemini-1.5-flash-latest",
+                 double_press_threshold=0.4):
         """
         Initialisiert den Transkribierer.
         """
@@ -34,6 +38,10 @@ class SpeakerTranscriber:
 
         self.result_queue = Queue()
         self.stop_event = threading.Event()
+        self.manual_process_event = threading.Event()
+
+        self.double_press_threshold = double_press_threshold
+        self.last_ctrl_press_time = 0
 
         print("[INFO] Lade das Whisper-Modell...")
         self.model = whisper.load_model(model_size)
@@ -83,7 +91,6 @@ class SpeakerTranscriber:
                     except Exception as e:
                         llm_response = f"[LLM-FEHLER: {e}]"
 
-                # NEU: Füge den Quellnamen zum Ergebnis hinzu
                 self.result_queue.put((source_name, transcribed_text, llm_response))
 
         except Exception as e:
@@ -116,7 +123,6 @@ class SpeakerTranscriber:
             print(f"\n[FEHLER] Konnte Quelle '{source_type}' nicht starten: {e}. Dieser Thread wird beendet.")
             return
 
-        # Thread-lokaler Zustand
         audio_buffer = []
         silence_start_time = None
         is_speaking = False
@@ -132,60 +138,75 @@ class SpeakerTranscriber:
                     audio_buffer.append(data)
                     silence_start_time = None
                 else:
-                    if is_speaking:
-                        if silence_start_time is None:
-                            silence_start_time = time.time()
+                    if is_speaking and silence_start_time is None:
+                        silence_start_time = time.time()
 
-                        if (time.time() - silence_start_time > pause_threshold):
-                            audio_to_process = np.concatenate(audio_buffer)
+                manual_trigger = self.manual_process_event.is_set()
+                automatic_trigger = is_speaking and silence_start_time and (
+                            time.time() - silence_start_time > pause_threshold)
 
-                            # Starte Verarbeitung in neuem Thread, um diesen nicht zu blockieren
-                            t = threading.Thread(
-                                target=self._process_audio_and_query_llm,
-                                args=(audio_to_process, source_name)
-                            )
-                            t.start()
+                if is_speaking and audio_buffer and (manual_trigger or automatic_trigger):
+                    if manual_trigger:
+                        print(f"[STATUS] Manuelle Verarbeitung für '{source_name}' ausgelöst.")
+                        self.manual_process_event.clear()
+                    else:
+                        print(f"[STATUS] Automatische Pause für '{source_name}' erkannt.")
 
-                            audio_buffer.clear()
-                            is_speaking = False
-                            silence_start_time = None
+                    audio_to_process = np.concatenate(audio_buffer)
+                    t = threading.Thread(target=self._process_audio_and_query_llm, args=(audio_to_process, source_name))
+                    t.start()
+
+                    audio_buffer.clear()
+                    is_speaking = False
+                    silence_start_time = None
+
+    def _handle_user_input(self):
+        """Wartet in einem separaten Thread auf einen doppelten Druck der Strg-Taste."""
+        print("\n[AKTION] Drücke zweimal schnell die [Strg]-Taste, um die Aufnahme manuell zu verarbeiten.")
+
+        def on_press(key):
+            if self.stop_event.is_set():
+                return False
+
+            if key in [keyboard.Key.ctrl_l, keyboard.Key.ctrl_r]:
+                current_time = time.time()
+                if current_time - self.last_ctrl_press_time < self.double_press_threshold:
+                    print("[AKTION] Doppelter Strg-Druck erkannt. Verarbeitung wird ausgelöst...")
+                    self.manual_process_event.set()
+                self.last_ctrl_press_time = current_time
+
+        with keyboard.Listener(on_press=on_press) as listener:
+            listener.join()
 
     def start_listening(self):
         """
-        Startet die Listener-Threads für Mikrofon und Lautsprecher
-        und verarbeitet die Ergebnisse aus der Queue.
+        Startet die Listener-Threads und verarbeitet die Ergebnisse aus der Queue.
         """
-        # daemon=True sorgt dafür, dass die Threads beendet werden, wenn das Hauptprogramm endet
         mic_thread = threading.Thread(target=self._listen_to_source, args=("microphone",), daemon=True)
         speaker_thread = threading.Thread(target=self._listen_to_source, args=("speaker",), daemon=True)
+        input_thread = threading.Thread(target=self._handle_user_input, daemon=True)
 
         mic_thread.start()
         speaker_thread.start()
+        input_thread.start()
 
         print("\n[INFO] Beide Quellen sind aktiv. (Beenden mit Strg+C)")
         print("-" * 50)
 
-        source_icons = {
-            "Mikrofon": "🎤",
-            "Lautsprecher": "🔊"
-        }
+        source_icons = {"Mikrofon": "🎤", "Lautsprecher": "🔊"}
 
         try:
             while True:
                 try:
-                    # Warte auf ein Ergebnis aus der Queue
                     source_name, original_text, llm_answer = self.result_queue.get(timeout=1)
-
                     icon = source_icons.get(source_name, "🗣️")
-
                     print("\n" + "=" * 50)
                     print(f"{icon} Quelle: {source_name}")
                     print(f"   Erkannter Text: {original_text}")
-                    print(f"🤖 Gemini Antwort: {llm_answer}")
+                    # GEÄNDERT: Füge Farbe zur LLM-Antwort hinzu
+                    print(f"🤖 Gemini Antwort: {Fore.CYAN}{llm_answer}{Style.RESET_ALL}")
                     print("=" * 50)
-
                 except Empty:
-                    # Wenn die Queue leer ist, einfach weitermachen
                     continue
         except KeyboardInterrupt:
             print("\n[INFO] Programm wird beendet.")
@@ -193,11 +214,15 @@ class SpeakerTranscriber:
 
 
 if __name__ == "__main__":
+    # NEU: Initialisiere colorama für plattformübergreifende Farben
+    colorama.init()
+
     transcriber = SpeakerTranscriber(
         model_size="base",
         lang="de",
-        speaker_pause_seconds=1.5,  # Längere Pause für Medienwiedergabe
-        mic_pause_seconds=0.5,  # Kürzere Pause für direkte Spracheingabe
-        silence_threshold=0.008
+        speaker_pause_seconds=2.5,
+        mic_pause_seconds=1.5,
+        silence_threshold=0.008,
+        double_press_threshold=0.4
     )
     transcriber.start_listening()

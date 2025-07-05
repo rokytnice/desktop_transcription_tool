@@ -3,3 +3,11 @@ openai-whisper
 soundcard
 numpy
 google-generativeai
+# Datei: requirements.txt
+
+soundcard
+numpy
+openai-whisper
+google-generativeai
+pynput
+colorama

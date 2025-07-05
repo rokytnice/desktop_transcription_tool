@@ -18,3 +18,6 @@ Skript erweitert, sodass es jetzt sowohl den System-Sound (Lautsprecher) als auc
 beides sol zusammen gehen
  
  
+strg zweimal drücken ist manuelle auslöser
+
+ausgaben farblich machen
