@@ -1,4 +1,4 @@
-sudo apt update && sudo apt installsudo apt update && sudo apt install xdotool xdotool#!/bin/bash
+sudo apt update && sudo apt install xdotool xdotool#!/bin/bash
 
 # Wechselt in das Verzeichnis, in dem das Bash-Skript liegt
 # Dies stellt sicher, dass relative Pfade korrekt funktionieren, egal von wo aus das Skript aufgerufen wird.
@@ -6,7 +6,7 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 cd "$SCRIPT_DIR"
 
 # Definiere den Pfad zum Python-Skript und zum virtuellen Environment
-PYTHON_SCRIPT="transcription_listener_offline.py"
+PYTHON_SCRIPT="transcription_offline.py"
 VENV_DIR=".venv" # Standardname für virtuelle Umgebungen
 
 # --- Überprüfungen ---
@@ -19,10 +19,10 @@ fi
 
 # 2. Prüfen, ob das virtuelle Environment-Verzeichnis existiert
 if [ ! -d "$VENV_DIR" ]; then
-    echo "Fehler: Virtuelles Environment '$VENV_DIR' nicht im Verzeichnis $SCRIPT_DIR gefunden."
-    echo "Bitte erstelle es mit: python3 -m venv $VENV_DIR"
-    echo "Und installiere die Abhängigkeiten mit: source $VENV_DIR/bin/activate && pip install -r requirements.txt"
-    exit 1
+    echo "Virtuelles Environment '$VENV_DIR' nicht gefunden. Starte Installationsskript..."
+    bash "$SCRIPT_DIR/install_deps.sh"
+    # Nach der Installation Skript beenden, damit der Benutzer neu starten kann
+    exit 0
 fi
 
 # 3. Prüfen, ob das Aktivierungsskript für das venv existiert

@@ -153,8 +153,18 @@ def transcribe_and_output():
         print(f"An error occurred during transcription: {e}")
 
 
-
 if __name__ == "__main__":
+    # Modellname bestimmen
+    llm_model = os.environ.get('GEMINI_LLM', 'gemini-2.5-flash-lite-preview-06-17')
+    print(f"Verwendetes LLM-Modell: {llm_model}")
+
+    # Konfiguration beim Start ausgeben
+    print("Konfiguration beim Start:")
+    print(f"samplerate: {samplerate}")
+    print(f"file_path: {file_path}")
+    print(f"LC_ALL: {os.environ.get('LC_ALL')}")
+    print(f"LANG: {os.environ.get('LANG')}")
+    print(f"GEMINI_LLM: {os.environ.get('GEMINI_LLM', 'NICHT GESETZT')}")
 
     print("Hold Ctrl + Alt to start recording. Release to stop recording and transcribe.")
     with keyboard.Listener(on_press=on_press, on_release=on_release) as listener:
