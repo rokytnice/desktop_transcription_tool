@@ -72,7 +72,7 @@ streaming = False
 previous_injected = ""
 stream_thread = None
 last_injected_text = ""  # Track to avoid duplicates
-STREAM_INTERVAL = 1.5  # Re-transcribe every 1.5 seconds (larger buffer = less duplicates)
+STREAM_INTERVAL = 3.0  # Re-transcribe every 3 seconds (large buffer = complete phrases, no garbage)
 
 def load_models():
     """Load Whisper and VAD models on startup"""
@@ -159,7 +159,7 @@ def streaming_transcriber():
             audio = np.concatenate(audio_data, axis=0).flatten()
             duration = len(audio) / SAMPLE_RATE
 
-            if duration < 1.0:  # Skip very short audio (no logging)
+            if duration < 2.0:  # Wait for at least 2 seconds of audio (complete phrase)
                 continue
 
             if USE_FASTER_WHISPER:
