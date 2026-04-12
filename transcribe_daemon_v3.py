@@ -117,8 +117,9 @@ def filter_hallucinations(text):
     for pattern in patterns:
         text = re.sub(pattern, '', text).strip()
 
-    # Remove standalone dots/ellipsis
-    if re.match(r'^\.+$', text):
+    # Remove standalone dots/ellipsis/punctuation
+    if not re.search(r'[a-zA-Z0-9äöüßÄÖÜ]', text):
+        # No alphanumeric characters (only punctuation/spaces)
         return ''
 
     # Clean up excessive trailing dots
