@@ -32,13 +32,7 @@ if ! xset q >/dev/null 2>&1; then
     exit 1
 fi
 
-echo "Running the script..."
 python $SCRIPT_DIR/transcription_offline.py
-
-
-
-
-echo "Script finished."
 
 
 
