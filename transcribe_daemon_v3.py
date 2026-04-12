@@ -72,7 +72,7 @@ streaming = False
 previous_injected = ""
 stream_thread = None
 last_injected_text = ""  # Track to avoid duplicates
-STREAM_INTERVAL = 3.0  # Re-transcribe every 3 seconds (large buffer = complete phrases, no garbage)
+STREAM_INTERVAL = 5.0  # Re-transcribe every 5 seconds (larger buffer = more context, fewer false positives)
 
 def load_models():
     """Load Whisper and VAD models on startup"""
