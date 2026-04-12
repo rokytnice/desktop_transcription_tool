@@ -135,24 +135,39 @@ def is_silence(audio, threshold=0.01):
 
 def find_new_text(previous, current):
     """Extract only new words from transcription"""
+    import difflib
+
     # Remove duplicates first
     current = remove_duplicate_phrases(current)
 
     if not previous:
         return current
+
+    # If current starts with previous (exact), return the new part
     if current.startswith(previous):
         new = current[len(previous):]
-        return new.lstrip()  # Remove leading space
+        return new.lstrip()
 
-    # Word-by-word comparison (handles minor corrections)
-    prev_words = previous.split()
-    curr_words = current.split()
-    i = 0
-    while i < len(prev_words) and i < len(curr_words) and prev_words[i] == curr_words[i]:
-        i += 1
+    # Normalize for comparison: lowercase, remove punctuation
+    prev_norm = previous.lower().replace(".", "").replace(",", "").strip()
+    curr_norm = current.lower().replace(".", "").replace(",", "").strip()
 
-    if i < len(curr_words):
-        return " ".join(curr_words[i:])
+    # If normalized versions match, no new text
+    if prev_norm == curr_norm:
+        return ""
+
+    # Find longest common substring at the start (character level)
+    match_len = 0
+    for i in range(min(len(previous), len(current))):
+        if previous[i] == current[i]:
+            match_len = i + 1
+        else:
+            break
+
+    # Return text after the matching portion
+    if match_len < len(current):
+        return current[match_len:].lstrip()
+
     return ""
 
 def play_beep(frequency=1000, duration=0.2):
