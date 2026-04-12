@@ -115,8 +115,8 @@ def remove_duplicate_phrases(text):
 
 def filter_hallucinations(text):
     """Remove known Whisper hallucinations (copyright notices, metadata, etc.)"""
-    # Remove copyright/attribution patterns
     import re
+
     # Filter out copyright notices, broadcast attributions, etc.
     patterns = [
         r'(?i)copyright\s+\w+\s+\d{4}',  # Copyright WDR 2021
@@ -128,6 +128,13 @@ def filter_hallucinations(text):
 
     for pattern in patterns:
         text = re.sub(pattern, '', text).strip()
+
+    # Remove standalone dots/ellipsis (Whisper hallucination)
+    if re.match(r'^\.+$', text):
+        return ''
+
+    # Clean up excessive trailing dots/ellipsis
+    text = re.sub(r'\.{2,}$', '.', text)  # Multiple dots → single dot
 
     return text.strip()
 
