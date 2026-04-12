@@ -11,7 +11,6 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '.venv', 'lib', 'pyth
 import socket
 import json
 import time
-import tempfile
 import logging
 import signal
 from pathlib import Path
@@ -19,7 +18,6 @@ from threading import Thread, Event
 import numpy as np
 
 import sounddevice as sd
-import soundfile as sf
 import subprocess
 
 import whisper  # Official OpenAI Whisper
@@ -201,14 +199,9 @@ def streaming_transcriber():
             if is_silence(audio):
                 continue
 
-            # Official Whisper API: write to temp WAV file (more reliable)
-            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
-                temp_path = tmp.name
-                sf.write(temp_path, audio, SAMPLE_RATE)
-
-            result = model.transcribe(temp_path, language="de", task="transcribe")
+            # Official Whisper API: pass numpy array directly (streaming, no temp files)
+            result = model.transcribe(audio, language="de", task="transcribe")
             current_text = result["text"].strip()
-            os.unlink(temp_path)
 
             # Filter out hallucinations (copyright notices, metadata, etc.)
             current_text = filter_hallucinations(current_text)
@@ -305,14 +298,9 @@ def stop_recording():
                 duration = len(audio) / SAMPLE_RATE
                 logger.info(f"📊 Final transcription of {duration:.1f}s audio...")
 
-                # Official Whisper API: write to temp WAV file
-                with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
-                    temp_path = tmp.name
-                    sf.write(temp_path, audio, SAMPLE_RATE)
-
-                result = model.transcribe(temp_path, language="de", task="transcribe")
+                # Official Whisper API: pass numpy array directly (streaming)
+                result = model.transcribe(audio, language="de", task="transcribe")
                 final_text = result["text"].strip()
-                os.unlink(temp_path)
 
                 # Filter out hallucinations
                 final_text = filter_hallucinations(final_text)
@@ -344,14 +332,9 @@ def transcribe_and_output():
         logger.info(f"📊 Processing {len(audio)} samples ({duration:.1f}s audio)...")
         logger.info(f"🔄 Sending to Whisper model for transcription...")
 
-        # Official Whisper API: write to temp WAV file
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
-            temp_path = tmp.name
-            sf.write(temp_path, audio, SAMPLE_RATE)
-
-        result = model.transcribe(temp_path, language="de", task="transcribe")
+        # Official Whisper API: pass numpy array directly (streaming)
+        result = model.transcribe(audio, language="de", task="transcribe")
         text = result["text"].strip()
-        os.unlink(temp_path)
 
         if text:
             logger.info(f"✅ TRANSCRIPTION RESULT: '{text}'")
