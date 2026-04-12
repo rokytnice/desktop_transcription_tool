@@ -68,6 +68,10 @@ vad_model = None
 HAS_VAD = False
 stop_event = Event()
 silence_start = None
+streaming = False
+previous_injected = ""
+stream_thread = None
+STREAM_INTERVAL = 2.0  # Re-transcribe every 2 seconds
 
 def load_models():
     """Load Whisper and VAD models on startup"""
@@ -98,6 +102,25 @@ def load_models():
 
     return True
 
+def find_new_text(previous, current):
+    """Extract only new words from transcription"""
+    if not previous:
+        return current
+    if current.startswith(previous):
+        new = current[len(previous):]
+        return new.lstrip()  # Remove leading space
+
+    # Word-by-word comparison (handles minor corrections)
+    prev_words = previous.split()
+    curr_words = current.split()
+    i = 0
+    while i < len(prev_words) and i < len(curr_words) and prev_words[i] == curr_words[i]:
+        i += 1
+
+    if i < len(curr_words):
+        return " ".join(curr_words[i:])
+    return ""
+
 def play_beep(frequency=1000, duration=0.2):
     """Play a beep tone"""
     try:
@@ -107,20 +130,71 @@ def play_beep(frequency=1000, duration=0.2):
     except Exception as e:
         logger.debug(f"Beep failed: {e}")
 
+def streaming_transcriber():
+    """Background thread: transcribe audio every 2 seconds while recording"""
+    global recording, audio_data, previous_injected, model, USE_FASTER_WHISPER
+
+    logger.info("🔴 Streaming transcriber started")
+
+    while recording:
+        time.sleep(STREAM_INTERVAL)
+
+        if not recording or len(audio_data) == 0:
+            continue
+
+        try:
+            # Transcribe all audio accumulated so far
+            audio = np.concatenate(audio_data, axis=0).flatten()
+            duration = len(audio) / SAMPLE_RATE
+
+            if duration < 0.5:  # Skip very short audio
+                continue
+
+            if USE_FASTER_WHISPER:
+                with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+                    temp_path = tmp.name
+                    sf.write(temp_path, audio, SAMPLE_RATE)
+
+                segments, _ = model.transcribe(temp_path, language="de", task="transcribe")
+                current_text = " ".join([s.text for s in segments]).strip()
+                os.unlink(temp_path)
+            else:
+                audio_float = audio.astype(np.float32) / 32768.0
+                result = model.transcribe(audio_float, language="de", task="transcribe")
+                current_text = result["text"].strip()
+
+            # Find new words
+            new_text = find_new_text(previous_injected, current_text)
+
+            if new_text:
+                logger.info(f"🔴 STREAMING: new text '{new_text}'")
+                inject_text(new_text)
+                previous_injected = current_text
+
+        except Exception as e:
+            logger.debug(f"Streaming transcription error: {e}")
+
 def start_recording():
-    global recording, audio_data, input_stream, recording_start_time, silence_start
+    global recording, audio_data, input_stream, recording_start_time, silence_start, streaming, stream_thread, previous_injected
     if not recording:
-        mode = " (VAD enabled)" if HAS_VAD else " (manual stop)"
+        mode = " (VAD enabled)" if HAS_VAD else " (streaming transcription)"
         logger.info(f"Recording started{mode}")
         print(f"🎤 RECORDING STARTED{mode}")
         play_beep(frequency=800, duration=0.15)  # Higher beep for start
         recording = True
+        streaming = True
+        previous_injected = ""
         recording_start_time = time.time()
         silence_start = None
         audio_data = []
         input_stream = sd.InputStream(samplerate=SAMPLE_RATE, channels=CHANNELS,
                                      dtype='float32', callback=audio_callback_vad)
         input_stream.start()
+
+        # Start streaming transcriber thread
+        stream_thread = Thread(target=streaming_transcriber, daemon=True)
+        stream_thread.start()
+        logger.info("🔴 Streaming thread launched")
 
 def audio_callback_vad(indata, frames, time_info, status):
     """Audio callback with VAD detection"""
@@ -148,21 +222,60 @@ def audio_callback_vad(indata, frames, time_info, status):
                 logger.debug(f"VAD error: {e}")
 
 def stop_recording():
-    global recording, input_stream, audio_data
+    global recording, input_stream, audio_data, streaming, stream_thread, previous_injected, model, USE_FASTER_WHISPER
     if recording:
         elapsed = time.time() - recording_start_time
         if elapsed < MIN_RECORDING_TIME:
             time.sleep(MIN_RECORDING_TIME - elapsed)
 
         recording = False
+        streaming = False
+
         if input_stream:
             input_stream.stop()
             input_stream.close()
 
+        # Wait for streaming thread to finish
+        if stream_thread:
+            stream_thread.join(timeout=5)
+
         time.sleep(0.1)
         logger.info("Recording stopped")
         play_beep(frequency=400, duration=0.2)  # Lower beep for stop
-        transcribe_and_output()
+
+        # Final transcription to get any remaining words
+        if audio_data:
+            try:
+                audio = np.concatenate(audio_data, axis=0).flatten()
+                duration = len(audio) / SAMPLE_RATE
+                logger.info(f"📊 Final transcription of {duration:.1f}s audio...")
+
+                if USE_FASTER_WHISPER:
+                    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+                        temp_path = tmp.name
+                        sf.write(temp_path, audio, SAMPLE_RATE)
+
+                    segments, _ = model.transcribe(temp_path, language="de", task="transcribe")
+                    final_text = " ".join([s.text for s in segments]).strip()
+                    os.unlink(temp_path)
+                else:
+                    audio_float = audio.astype(np.float32) / 32768.0
+                    result = model.transcribe(audio_float, language="de", task="transcribe")
+                    final_text = result["text"].strip()
+
+                # Inject any remaining new words
+                new_text = find_new_text(previous_injected, final_text)
+                if new_text:
+                    logger.info(f"✅ FINAL TEXT: '{new_text}'")
+                    inject_text(new_text)
+                    previous_injected = final_text
+                elif previous_injected:
+                    logger.info(f"✅ TRANSCRIPTION COMPLETE: '{previous_injected}'")
+                else:
+                    logger.warning("⚠️  Empty transcription (no speech detected)")
+
+            except Exception as e:
+                logger.error(f"Final transcription error: {e}")
 
 def transcribe_and_output():
     global audio_data, model
