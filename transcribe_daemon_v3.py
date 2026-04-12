@@ -51,7 +51,7 @@ logger = logging.getLogger(__name__)
 SOCKET_FILE = Path.home() / ".cache" / "transcribe.sock"
 SAMPLE_RATE = 16000
 CHANNELS = 1
-MODEL_NAME = "medium"  # Better accuracy, fewer hallucinations
+MODEL_NAME = "tiny"  # FAST! Real-time streaming
 DOUBLE_TAP_TIMEOUT = 0.5
 MIN_RECORDING_TIME = 1.0
 SILENCE_THRESHOLD = 0.5  # seconds of silence before auto-stop
@@ -71,7 +71,8 @@ silence_start = None
 streaming = False
 previous_injected = ""
 stream_thread = None
-STREAM_INTERVAL = 1.0  # Re-transcribe every 1 second (more frequent = less repetition)
+last_injected_text = ""  # Track to avoid duplicates
+STREAM_INTERVAL = 1.5  # Re-transcribe every 1.5 seconds (larger buffer = less duplicates)
 
 def load_models():
     """Load Whisper and VAD models on startup"""
@@ -144,10 +145,8 @@ def play_beep(frequency=1000, duration=0.2):
         logger.debug(f"Beep failed: {e}")
 
 def streaming_transcriber():
-    """Background thread: transcribe audio every 2 seconds while recording"""
-    global recording, audio_data, previous_injected, model, USE_FASTER_WHISPER
-
-    logger.info("🔴 Streaming transcriber started")
+    """Background thread: transcribe audio every 1.5 seconds while recording"""
+    global recording, audio_data, previous_injected, model, USE_FASTER_WHISPER, last_injected_text
 
     while recording:
         time.sleep(STREAM_INTERVAL)
@@ -160,7 +159,7 @@ def streaming_transcriber():
             audio = np.concatenate(audio_data, axis=0).flatten()
             duration = len(audio) / SAMPLE_RATE
 
-            if duration < 0.5:  # Skip very short audio
+            if duration < 1.0:  # Skip very short audio (no logging)
                 continue
 
             if USE_FASTER_WHISPER:
@@ -176,27 +175,34 @@ def streaming_transcriber():
                 result = model.transcribe(audio_float, language="de", task="transcribe")
                 current_text = result["text"].strip()
 
+            # Skip if empty (no logging)
+            if not current_text:
+                continue
+
             # Find new words
             new_text = find_new_text(previous_injected, current_text)
 
-            if new_text:
-                logger.info(f"🔴 STREAMING: new text '{new_text}'")
+            # Only inject if new text AND different from last injection (avoid duplicates)
+            if new_text and new_text != last_injected_text:
+                logger.info(f"🔴 STREAMING: '{new_text}'")
                 inject_text(new_text)
                 previous_injected = current_text
+                last_injected_text = new_text
 
         except Exception as e:
-            logger.debug(f"Streaming transcription error: {e}")
+            logger.debug(f"Streaming error: {e}")
 
 def start_recording():
-    global recording, audio_data, input_stream, recording_start_time, silence_start, streaming, stream_thread, previous_injected
+    global recording, audio_data, input_stream, recording_start_time, silence_start, streaming, stream_thread, previous_injected, last_injected_text
     if not recording:
-        mode = " (VAD enabled)" if HAS_VAD else " (streaming transcription)"
+        mode = " (real-time streaming)"
         logger.info(f"Recording started{mode}")
-        print(f"🎤 RECORDING STARTED{mode}")
-        play_beep(frequency=800, duration=0.15)  # Higher beep for start
+        print(f"🎤 RECORDING{mode}")
+        play_beep(frequency=800, duration=0.15)
         recording = True
         streaming = True
         previous_injected = ""
+        last_injected_text = ""
         recording_start_time = time.time()
         silence_start = None
         audio_data = []
@@ -204,10 +210,8 @@ def start_recording():
                                      dtype='float32', callback=audio_callback_vad)
         input_stream.start()
 
-        # Start streaming transcriber thread
         stream_thread = Thread(target=streaming_transcriber, daemon=True)
         stream_thread.start()
-        logger.info("🔴 Streaming thread launched")
 
 def audio_callback_vad(indata, frames, time_info, status):
     """Audio callback with VAD detection"""
