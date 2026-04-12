@@ -4,7 +4,7 @@ charset-normalizer==3.4.0
 evdev==1.7.1
 idna==3.10
 keyboard==0.13.5
-numpy==2.0.0
+numpy>=1.24,<2.1  # NumPy 2.0-2.1 (Whisper/Numba compatible)
 PyAudio==0.2.14
 pycparser==2.22
 pynput==1.7.7
