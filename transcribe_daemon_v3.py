@@ -51,7 +51,7 @@ logger = logging.getLogger(__name__)
 SOCKET_FILE = Path.home() / ".cache" / "transcribe.sock"
 SAMPLE_RATE = 16000
 CHANNELS = 1
-MODEL_NAME = "small"  # Sweet spot: FAST + ACCURATE German
+MODEL_NAME = "base"  # Better accuracy, fewer hallucinations (slight speed trade-off)
 DOUBLE_TAP_TIMEOUT = 0.5
 MIN_RECORDING_TIME = 1.0
 SILENCE_THRESHOLD = 0.5  # seconds of silence before auto-stop
@@ -114,29 +114,25 @@ def remove_duplicate_phrases(text):
     return ". ".join(unique) + ("." if text.endswith(".") else "")
 
 def filter_hallucinations(text):
-    """Remove known Whisper hallucinations (copyright notices, metadata, etc.)"""
+    """Remove obvious Whisper hallucinations (minimal filtering - base model reduces most)"""
     import re
 
-    # Filter out copyright notices, broadcast attributions, etc.
+    # Only filter the most egregious hallucinations
+    # The 'base' model is much better trained, so we don't need extensive patterns
     patterns = [
-        r'(?i)copyright\s+\w+\s+\d{4}',  # Copyright WDR 2021
-        r'(?i)©\s*\d{4}',                  # © 2021
-        r'(?i)alle\s+rechte\s+vorbehalten',  # All rights reserved (German)
-        r'(?i)produktionsdatum:?\s*\d',   # Production date
-        r'(?i)\[\w+.*?\]',                # [metadata tags]
-        r'(?i)untertitel\s+im\s+auftrag\s+des\s+\w+',  # "Untertitel im Auftrag des YDF"
-        r'(?i)untertitel.*?\s+by\s+\w+',  # Subtitle attribution patterns
+        r'(?i)copyright\s+\w+\s+\d{4}',  # Copyright notices
+        r'(?i)©\s*\d{4}',                  # © symbol with year
     ]
 
     for pattern in patterns:
         text = re.sub(pattern, '', text).strip()
 
-    # Remove standalone dots/ellipsis (Whisper hallucination)
+    # Remove standalone dots/ellipsis
     if re.match(r'^\.+$', text):
         return ''
 
-    # Clean up excessive trailing dots/ellipsis
-    text = re.sub(r'\.{2,}$', '.', text)  # Multiple dots → single dot
+    # Clean up excessive trailing dots
+    text = re.sub(r'\.{2,}$', '.', text)
 
     return text.strip()
 
