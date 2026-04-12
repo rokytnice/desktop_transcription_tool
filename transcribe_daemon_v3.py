@@ -51,7 +51,7 @@ logger = logging.getLogger(__name__)
 SOCKET_FILE = Path.home() / ".cache" / "transcribe.sock"
 SAMPLE_RATE = 16000
 CHANNELS = 1
-MODEL_NAME = "tiny"  # FAST! Real-time streaming
+MODEL_NAME = "small"  # Sweet spot: FAST + ACCURATE German
 DOUBLE_TAP_TIMEOUT = 0.5
 MIN_RECORDING_TIME = 1.0
 SILENCE_THRESHOLD = 0.5  # seconds of silence before auto-stop
@@ -112,6 +112,24 @@ def remove_duplicate_phrases(text):
         if sent and sent not in unique:
             unique.append(sent)
     return ". ".join(unique) + ("." if text.endswith(".") else "")
+
+def filter_hallucinations(text):
+    """Remove known Whisper hallucinations (copyright notices, metadata, etc.)"""
+    # Remove copyright/attribution patterns
+    import re
+    # Filter out copyright notices, broadcast attributions, etc.
+    patterns = [
+        r'(?i)copyright\s+\w+\s+\d{4}',  # Copyright WDR 2021
+        r'(?i)©\s*\d{4}',                  # © 2021
+        r'(?i)alle\s+rechte\s+vorbehalten',  # All rights reserved (German)
+        r'(?i)produktionsdatum:?\s*\d',   # Production date
+        r'(?i)\[\w+.*?\]',                # [metadata tags]
+    ]
+
+    for pattern in patterns:
+        text = re.sub(pattern, '', text).strip()
+
+    return text.strip()
 
 def is_silence(audio, threshold=0.01):
     """Detect if audio is mostly silence (RMS too low)"""
@@ -183,6 +201,9 @@ def streaming_transcriber():
                 audio_float = audio.astype(np.float32) / 32768.0
                 result = model.transcribe(audio_float, language="de", task="transcribe")
                 current_text = result["text"].strip()
+
+            # Filter out hallucinations (copyright notices, metadata, etc.)
+            current_text = filter_hallucinations(current_text)
 
             # Skip if empty (no logging)
             if not current_text:
@@ -288,6 +309,9 @@ def stop_recording():
                     audio_float = audio.astype(np.float32) / 32768.0
                     result = model.transcribe(audio_float, language="de", task="transcribe")
                     final_text = result["text"].strip()
+
+                # Filter out hallucinations
+                final_text = filter_hallucinations(final_text)
 
                 # Inject any remaining new words
                 new_text = find_new_text(previous_injected, final_text)
