@@ -22,12 +22,7 @@ import sounddevice as sd
 import soundfile as sf
 import subprocess
 
-try:
-    from faster_whisper import WhisperModel
-    USE_FASTER_WHISPER = True
-except ImportError:
-    import whisper
-    USE_FASTER_WHISPER = False
+import whisper  # Official OpenAI Whisper
 
 from evdev import InputDevice, ecodes, list_devices
 import select
@@ -78,12 +73,9 @@ def load_models():
     """Load Whisper and VAD models on startup"""
     global model, vad_model, HAS_VAD
 
-    logger.info(f"Loading Whisper model ({MODEL_NAME})...")
+    logger.info(f"Loading Whisper model ({MODEL_NAME}) - Official OpenAI...")
     try:
-        if USE_FASTER_WHISPER:
-            model = WhisperModel(MODEL_NAME, device="auto", compute_type="default")
-        else:
-            model = __import__("whisper").load_model(MODEL_NAME, device="cpu")
+        model = whisper.load_model(MODEL_NAME, device="cpu")
         logger.info("✓ Whisper model loaded")
     except Exception as e:
         logger.error(f"Failed to load Whisper: {e}")
@@ -173,8 +165,8 @@ def play_beep(frequency=1000, duration=0.2):
         logger.debug(f"Beep failed: {e}")
 
 def streaming_transcriber():
-    """Background thread: transcribe audio every 1.5 seconds while recording"""
-    global recording, audio_data, previous_injected, model, USE_FASTER_WHISPER, last_injected_text
+    """Background thread: transcribe audio every 5 seconds while recording"""
+    global recording, audio_data, previous_injected, model, last_injected_text
 
     while recording:
         time.sleep(STREAM_INTERVAL)
@@ -194,18 +186,10 @@ def streaming_transcriber():
             if is_silence(audio):
                 continue
 
-            if USE_FASTER_WHISPER:
-                with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
-                    temp_path = tmp.name
-                    sf.write(temp_path, audio, SAMPLE_RATE)
-
-                segments, _ = model.transcribe(temp_path, language="de", task="transcribe")
-                current_text = " ".join([s.text for s in segments]).strip()
-                os.unlink(temp_path)
-            else:
-                audio_float = audio.astype(np.float32) / 32768.0
-                result = model.transcribe(audio_float, language="de", task="transcribe")
-                current_text = result["text"].strip()
+            # Official Whisper API: convert to float32 (normalized -1 to 1)
+            audio_float = audio.astype(np.float32) / 32768.0
+            result = model.transcribe(audio_float, language="de", task="transcribe")
+            current_text = result["text"].strip()
 
             # Filter out hallucinations (copyright notices, metadata, etc.)
             current_text = filter_hallucinations(current_text)
@@ -274,7 +258,7 @@ def audio_callback_vad(indata, frames, time_info, status):
                 logger.debug(f"VAD error: {e}")
 
 def stop_recording():
-    global recording, input_stream, audio_data, streaming, stream_thread, previous_injected, model, USE_FASTER_WHISPER
+    global recording, input_stream, audio_data, streaming, stream_thread, previous_injected, model
     if recording:
         elapsed = time.time() - recording_start_time
         if elapsed < MIN_RECORDING_TIME:
@@ -302,18 +286,10 @@ def stop_recording():
                 duration = len(audio) / SAMPLE_RATE
                 logger.info(f"📊 Final transcription of {duration:.1f}s audio...")
 
-                if USE_FASTER_WHISPER:
-                    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
-                        temp_path = tmp.name
-                        sf.write(temp_path, audio, SAMPLE_RATE)
-
-                    segments, _ = model.transcribe(temp_path, language="de", task="transcribe")
-                    final_text = " ".join([s.text for s in segments]).strip()
-                    os.unlink(temp_path)
-                else:
-                    audio_float = audio.astype(np.float32) / 32768.0
-                    result = model.transcribe(audio_float, language="de", task="transcribe")
-                    final_text = result["text"].strip()
+                # Official Whisper API: convert to float32
+                audio_float = audio.astype(np.float32) / 32768.0
+                result = model.transcribe(audio_float, language="de", task="transcribe")
+                final_text = result["text"].strip()
 
                 # Filter out hallucinations
                 final_text = filter_hallucinations(final_text)
@@ -345,18 +321,10 @@ def transcribe_and_output():
         logger.info(f"📊 Processing {len(audio)} samples ({duration:.1f}s audio)...")
         logger.info(f"🔄 Sending to Whisper model for transcription...")
 
-        if USE_FASTER_WHISPER:
-            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
-                temp_path = tmp.name
-                sf.write(temp_path, audio, SAMPLE_RATE)
-
-            segments, _ = model.transcribe(temp_path, language="de", task="transcribe")
-            text = " ".join([s.text for s in segments]).strip()
-            os.unlink(temp_path)
-        else:
-            audio_float = audio.astype(np.float32) / 32768.0
-            result = model.transcribe(audio_float, language="de", task="transcribe")
-            text = result["text"].strip()
+        # Official Whisper API
+        audio_float = audio.astype(np.float32) / 32768.0
+        result = model.transcribe(audio_float, language="de", task="transcribe")
+        text = result["text"].strip()
 
         if text:
             logger.info(f"✅ TRANSCRIPTION RESULT: '{text}'")
