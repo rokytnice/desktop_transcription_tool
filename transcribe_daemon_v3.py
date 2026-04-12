@@ -124,6 +124,8 @@ def filter_hallucinations(text):
         r'(?i)alle\s+rechte\s+vorbehalten',  # All rights reserved (German)
         r'(?i)produktionsdatum:?\s*\d',   # Production date
         r'(?i)\[\w+.*?\]',                # [metadata tags]
+        r'(?i)untertitel\s+im\s+auftrag\s+des\s+\w+',  # "Untertitel im Auftrag des YDF"
+        r'(?i)untertitel.*?\s+by\s+\w+',  # Subtitle attribution patterns
     ]
 
     for pattern in patterns:
