@@ -113,6 +113,11 @@ def remove_duplicate_phrases(text):
             unique.append(sent)
     return ". ".join(unique) + ("." if text.endswith(".") else "")
 
+def is_silence(audio, threshold=0.01):
+    """Detect if audio is mostly silence (RMS too low)"""
+    rms = np.sqrt(np.mean(audio ** 2))
+    return rms < threshold
+
 def find_new_text(previous, current):
     """Extract only new words from transcription"""
     # Remove duplicates first
@@ -159,7 +164,11 @@ def streaming_transcriber():
             audio = np.concatenate(audio_data, axis=0).flatten()
             duration = len(audio) / SAMPLE_RATE
 
-            if duration < 2.0:  # Wait for at least 2 seconds of audio (complete phrase)
+            if duration < 2.0:  # Wait for at least 2 seconds of audio
+                continue
+
+            # Skip if audio is mostly silence (no speech)
+            if is_silence(audio):
                 continue
 
             if USE_FASTER_WHISPER:
