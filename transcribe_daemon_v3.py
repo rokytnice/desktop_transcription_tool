@@ -51,7 +51,7 @@ logger = logging.getLogger(__name__)
 SOCKET_FILE = Path.home() / ".cache" / "transcribe.sock"
 SAMPLE_RATE = 16000
 CHANNELS = 1
-MODEL_NAME = "small"
+MODEL_NAME = "medium"  # Better accuracy, fewer hallucinations
 DOUBLE_TAP_TIMEOUT = 0.5
 MIN_RECORDING_TIME = 1.0
 SILENCE_THRESHOLD = 0.5  # seconds of silence before auto-stop
@@ -71,7 +71,7 @@ silence_start = None
 streaming = False
 previous_injected = ""
 stream_thread = None
-STREAM_INTERVAL = 2.0  # Re-transcribe every 2 seconds
+STREAM_INTERVAL = 1.0  # Re-transcribe every 1 second (more frequent = less repetition)
 
 def load_models():
     """Load Whisper and VAD models on startup"""
@@ -102,8 +102,21 @@ def load_models():
 
     return True
 
+def remove_duplicate_phrases(text):
+    """Remove repeated phrases from Whisper hallucinations"""
+    sentences = text.split(". ")
+    unique = []
+    for sent in sentences:
+        sent = sent.strip()
+        if sent and sent not in unique:
+            unique.append(sent)
+    return ". ".join(unique) + ("." if text.endswith(".") else "")
+
 def find_new_text(previous, current):
     """Extract only new words from transcription"""
+    # Remove duplicates first
+    current = remove_duplicate_phrases(current)
+
     if not previous:
         return current
     if current.startswith(previous):
