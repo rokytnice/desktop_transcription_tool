@@ -1,0 +1,2 @@
+Schreibe mir ein Programm in Python, das mit einem LLM, also Gemini, eine Transkription macht. Dazu soll ein großes Audio-File im m4a format in kleinere Audio-Files zerteilt werden und jedes einzelne file transcripiert werden. Alle 
+übersetzung, also alle Transkription, sollen dann am Ende in einer Datei landen. GEMINI_API_KEY - der api Key befindet sich in dieser Umgebungsbvariablen .  Das Projekt soll in den Ordner big_audio_file_transcription 
