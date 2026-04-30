@@ -50,20 +50,20 @@ fi
 echo -e "${BLUE}[3/5]${NC} Installing Python packages for all tools..."
 source .venv/bin/activate
 
-pip install --upgrade pip setuptools wheel > /dev/null 2>&1
+pip install --break-system-packages --upgrade pip setuptools wheel > /dev/null 2>&1
 
 # Install offline requirements
 echo "   → offline/ (Whisper)"
-pip install -q -r offline/requirements.txt
+pip install --break-system-packages -q -r offline/requirements.txt
 
 # Install online requirements
 echo "   → online/ (Google API)"
-pip install -q -r online/requirements.txt
+pip install --break-system-packages -q -r online/requirements.txt
 
 # Install big_audio_file requirements
 if [ -f "big_audio_file_transcription/requirements.txt" ]; then
     echo "   → big_audio_file_transcription/ (Große Dateien)"
-    pip install -q -r big_audio_file_transcription/requirements.txt
+    pip install --break-system-packages -q -r big_audio_file_transcription/requirements.txt
 fi
 
 echo -e "${GREEN}✓ All packages installed${NC}\n"

@@ -45,14 +45,13 @@ fi
 # 3. Install Python packages
 echo -e "${BLUE}[3/4]${NC} Installing Python packages..."
 source .venv/bin/activate
-pip install --upgrade pip setuptools wheel
-pip install -r requirements.txt
+pip install --break-system-packages --upgrade pip setuptools wheel
+pip install --break-system-packages -r requirements.txt
 echo -e "${GREEN}✓ Python packages installed${NC}\n"
 
 # 4. Make scripts executable
 echo -e "${BLUE}[4/4]${NC} Making scripts executable..."
 chmod +x transcription_offline.py
-chmod +x transcription_online.py
 chmod +x install.sh
 chmod +x run.sh 2>/dev/null || true
 echo -e "${GREEN}✓ Scripts are executable${NC}\n"

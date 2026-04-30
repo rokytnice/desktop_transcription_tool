@@ -1,8 +1,8 @@
-sounddevice==0.5.1
-soundfile==0.12.1
-numpy==2.0.0
-evdev==1.7.1
-pynput==1.7.7
-whisper==20240930
-torch==2.5.1
-tqdm==4.67.1
+sounddevice>=0.4.5
+soundfile>=0.12.0
+numpy>=1.20,<2.0
+evdev>=1.6.0
+pynput>=1.7.0
+openai-whisper>=1.0
+torch>=2.0
+tqdm>=4.60
