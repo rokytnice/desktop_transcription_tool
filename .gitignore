@@ -1,2 +1,28 @@
 /.idea/*
 /myenv/*
+.venv/
+*.pyc
+__pycache__/
+.DS_Store
+
+# Audio & Log files
+*.wav
+*.mp3
+*.m4a
+*.log
+transcription_listener.log
+audio_recording.wav
+test_recording.wav
+
+# IDE
+.vscode/
+*.swp
+*.swo
+
+# OS
+.zencoder/
+Anaconda3-*/
+
+# Large files
+*.iso
+*.exe
