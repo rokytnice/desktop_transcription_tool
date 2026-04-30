@@ -36,19 +36,27 @@ desktop_transcription_tool/
 
 ## 🚀 Schnelstart
 
-### Offline (Whisper - lokal, kein API Key nötig)
+### Installation (einmalig)
 ```bash
-cd offline
 ./install.sh
-./run.sh
+```
+Das installiert alles und erstellt Convenience-Scripts!
+
+### Offline (Whisper - lokal, kein API Key nötig) ⭐
+```bash
+./run_offline.sh
 ```
 
 ### Online (Google Speech API - mit API Key)
 ```bash
-cd online
-pip install -r requirements.txt
 export API_KEY="your_google_api_key"
-python transcription_online.py
+./run_online.sh
+```
+
+Oder direkt in den Ordner:
+```bash
+cd offline && ./run.sh
+cd online && python transcription_online.py
 ```
 
 ## 🛠️ Features nach Tool
