@@ -177,7 +177,7 @@ def save_audio():
         print(f"✗ Error saving audio: {e}")
 
 
-ctrl_press_times = []
+alt_press_times = []
 keyboard_lock = threading.Lock()
 DOUBLE_TAP_TIMEOUT = 0.5  # 500ms window for double-tap
 
@@ -197,15 +197,15 @@ def monitor_device(device):
                         current_time = time.time()
 
                         # Remove old presses outside the window
-                        ctrl_press_times[:] = [t for t in ctrl_press_times if current_time - t < DOUBLE_TAP_TIMEOUT]
+                        alt_press_times[:] = [t for t in alt_press_times if current_time - t < DOUBLE_TAP_TIMEOUT]
 
-                        ctrl_press_times.append(current_time)
+                        alt_press_times.append(current_time)
 
-                        logger.debug(f"Ctrl press #{len(ctrl_press_times)}")
+                        logger.debug(f"Alt press #{len(alt_press_times)}")
 
                         # Check for double-tap (2 presses within timeout)
-                        if len(ctrl_press_times) >= 2:
-                            logger.info(f"*** DOUBLE-TAP DETECTED ({len(ctrl_press_times)} presses) ***")
+                        if len(alt_press_times) >= 2:
+                            logger.info(f"*** DOUBLE-TAP DETECTED ({len(alt_press_times)} presses) ***")
 
                             if not recording:
                                 print("\n>>> 🔴 RECORDING STARTED <<<")
@@ -216,7 +216,7 @@ def monitor_device(device):
                                 stop_recording()
 
                             # Reset the press counter
-                            ctrl_press_times.clear()
+                            alt_press_times.clear()
 
     except Exception as e:
         logger.error(f"Error monitoring {device.path}: {e}")
