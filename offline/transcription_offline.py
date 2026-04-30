@@ -41,6 +41,26 @@ logger.addHandler(console_handler)
 
 current_keys = set()
 
+def play_beep(frequency=1000, duration=0.2, volume=0.3):
+    """Play a simple beep sound"""
+    try:
+        sample_rate = 22050
+        samples = int(sample_rate * duration)
+        t = np.linspace(0, duration, samples)
+        waveform = np.sin(2 * np.pi * frequency * t) * volume
+        waveform = waveform.astype(np.float32)
+        sd.play(waveform, sample_rate, blocking=True)
+    except Exception as e:
+        logger.warning(f"Could not play sound: {e}")
+
+def play_start_recording_sound():
+    """Play sound when recording starts - short beep"""
+    play_beep(frequency=800, duration=0.15, volume=0.3)
+
+def play_stop_recording_sound():
+    """Play sound when recording stops - higher tone"""
+    play_beep(frequency=1200, duration=0.2, volume=0.3)
+
 # Audio device selection
 def select_audio_device():
     """Show available audio input devices and let user select one"""
@@ -134,6 +154,7 @@ def start_recording():
             )
             input_stream.start()
             logger.info("InputStream started")
+            play_start_recording_sound()
         except Exception as e:
             logger.error(f"Error starting input stream: {e}")
             recording = False
@@ -310,6 +331,7 @@ def transcribe_and_output():
         print(f"Transcription: {transcription}")
         logging.info(f"Transcription: {transcription}")
         type_text_in_active_window(transcription)
+        play_stop_recording_sound()
     except Exception as e:
         logging.error(f"An error occurred during transcription: {e}")
         print(f"An error occurred during transcription: {e}")
