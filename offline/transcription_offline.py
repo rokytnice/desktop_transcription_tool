@@ -59,28 +59,37 @@ logger.addHandler(console_handler)
 
 current_keys = set()
 
-def play_beep(frequency=1000, duration=0.2, volume=0.5):
-    """Play a simple beep sound (non-blocking, in separate thread)"""
+def _generate_beep_wav(filepath, frequency=1000, duration=0.2, volume=0.5):
+    """Generate a beep WAV file"""
+    sample_rate = 48000
+    samples = int(sample_rate * duration)
+    t = np.linspace(0, duration, samples)
+    waveform = (np.sin(2 * np.pi * frequency * t) * volume * 32767).astype(np.int16)
+    waveform_stereo = np.column_stack([waveform, waveform])
+    sf.write(filepath, waveform_stereo, sample_rate, subtype='PCM_16')
+
+# Pre-generate beep WAVs once
+START_BEEP_PATH = os.path.join(TRANSCRIPTION_DIR, "start_beep.wav")
+STOP_BEEP_PATH = os.path.join(TRANSCRIPTION_DIR, "stop_beep.wav")
+_generate_beep_wav(START_BEEP_PATH, frequency=800, duration=0.15, volume=0.5)
+_generate_beep_wav(STOP_BEEP_PATH, frequency=1200, duration=0.2, volume=0.5)
+
+def play_beep(filepath):
+    """Play a WAV file using paplay (non-blocking)"""
     def _play():
         try:
-            sample_rate = 48000
-            samples = int(sample_rate * duration)
-            t = np.linspace(0, duration, samples)
-            waveform = (np.sin(2 * np.pi * frequency * t) * volume).astype(np.float32)
-            waveform_stereo = np.column_stack([waveform, waveform])
-            sd.play(waveform_stereo, sample_rate, blocking=True)
-            sd.wait()
+            subprocess.run(["paplay", filepath], check=False, timeout=5)
         except Exception as e:
             logger.warning(f"Could not play sound: {e}")
     threading.Thread(target=_play, daemon=True).start()
 
 def play_start_recording_sound():
-    """Play sound when recording starts - short beep"""
-    play_beep(frequency=800, duration=0.15, volume=0.3)
+    """Play sound when recording starts"""
+    play_beep(START_BEEP_PATH)
 
 def play_stop_recording_sound():
-    """Play sound when recording stops - higher tone"""
-    play_beep(frequency=1200, duration=0.2, volume=0.3)
+    """Play sound when recording stops"""
+    play_beep(STOP_BEEP_PATH)
 
 # Audio device selection
 def select_audio_device():
