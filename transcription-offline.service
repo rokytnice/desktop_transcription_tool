@@ -8,7 +8,7 @@ Wants=graphical.target
 Type=simple
 User=aroc
 Group=aroc
-Environment="AUDIO_DEVICE=8"
+Environment="AUDIO_DEVICE=7"
 Environment="XDG_RUNTIME_DIR=/run/user/1000"
 Environment="PULSE_SERVER=unix:/run/user/1000/pulse/native"
 Environment="DISPLAY=:0"
