@@ -166,10 +166,16 @@ def audio_callback(indata, frames, time, status):
         audio_data.append(indata.copy())
 
 def start_recording():
-    global recording, audio_data, input_stream
+    global recording, audio_data, input_stream, samplerate
     if not recording:
-        device_name = sd.query_devices(device_index)['name']
-        msg = f"🎤 Recording from DEVICE {device_index}: {device_name}"
+        device_info = sd.query_devices(device_index)
+        device_name = device_info['name']
+        # Use device's native sample rate and channel count
+        device_samplerate = int(device_info['default_samplerate'])
+        device_channels = min(device_info['max_input_channels'], 2)
+        samplerate = device_samplerate
+
+        msg = f"🎤 Recording from DEVICE {device_index}: {device_name} @ {device_samplerate}Hz, {device_channels}ch"
         logger.info(msg)
         print(msg)
 
@@ -179,8 +185,8 @@ def start_recording():
         try:
             input_stream = sd.InputStream(
                 device=device_index,
-                samplerate=samplerate,
-                channels=1,
+                samplerate=device_samplerate,
+                channels=device_channels,
                 dtype='int16',
                 callback=audio_callback
             )
