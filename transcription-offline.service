@@ -9,6 +9,10 @@ Type=simple
 User=aroc
 Group=aroc
 Environment="AUDIO_DEVICE=8"
+Environment="XDG_RUNTIME_DIR=/run/user/1000"
+Environment="PULSE_SERVER=unix:/run/user/1000/pulse/native"
+Environment="DISPLAY=:0"
+Environment="XAUTHORITY=/home/aroc/.Xauthority"
 WorkingDirectory=/home/aroc/projects/desktop_transcription_tool/offline
 ExecStart=/home/aroc/projects/desktop_transcription_tool/offline/.venv/bin/python /home/aroc/projects/desktop_transcription_tool/offline/transcription_offline.py
 Restart=on-failure
