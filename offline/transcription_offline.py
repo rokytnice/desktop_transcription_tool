@@ -60,17 +60,19 @@ logger.addHandler(console_handler)
 current_keys = set()
 
 def play_beep(frequency=1000, duration=0.2, volume=0.5):
-    """Play a simple beep sound"""
-    try:
-        sample_rate = 48000
-        samples = int(sample_rate * duration)
-        t = np.linspace(0, duration, samples)
-        waveform = (np.sin(2 * np.pi * frequency * t) * volume).astype(np.float32)
-        # Stereo for compatibility with default audio output
-        waveform_stereo = np.column_stack([waveform, waveform])
-        sd.play(waveform_stereo, sample_rate, blocking=True)
-    except Exception as e:
-        logger.warning(f"Could not play sound: {e}")
+    """Play a simple beep sound (non-blocking, in separate thread)"""
+    def _play():
+        try:
+            sample_rate = 48000
+            samples = int(sample_rate * duration)
+            t = np.linspace(0, duration, samples)
+            waveform = (np.sin(2 * np.pi * frequency * t) * volume).astype(np.float32)
+            waveform_stereo = np.column_stack([waveform, waveform])
+            sd.play(waveform_stereo, sample_rate, blocking=True)
+            sd.wait()
+        except Exception as e:
+            logger.warning(f"Could not play sound: {e}")
+    threading.Thread(target=_play, daemon=True).start()
 
 def play_start_recording_sound():
     """Play sound when recording starts - short beep"""
