@@ -285,11 +285,9 @@ def process_keyboard_events(devices):
 
 def transcribe_with_whisper(audio_file_path):
     try:
-        model = whisper.load_model("base")
-        model = torch.quantization.quantize_dynamic(
-            model, {torch.nn.Linear}, dtype=torch.qint8
-        )
-        result = model.transcribe(audio_file_path,  fp16=True, language="de", task="transcribe")
+        print("📥 Loading Whisper large model (best quality)...")
+        model = whisper.load_model("large")
+        result = model.transcribe(audio_file_path, language="de", task="transcribe")
 
         transcription = result["text"]
         logging.info(f"Transcription result: {transcription}")
