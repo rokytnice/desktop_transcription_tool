@@ -18,7 +18,14 @@ os.environ["LC_ALL"] = "de_DE.UTF-8"
 os.environ["LANG"] = "de_DE.UTF-8"
 
 recording = False
-file_path = "audio_recording.wav"
+
+# Setup writable directory for logs and audio files
+TRANSCRIPTION_DIR = os.path.expanduser("~/.transcription")
+os.makedirs(TRANSCRIPTION_DIR, exist_ok=True)
+
+file_path = os.path.join(TRANSCRIPTION_DIR, "audio_recording.wav")
+log_file_path = os.path.join(TRANSCRIPTION_DIR, "transcription_listener.log")
+
 audio_data = []
 input_stream = None
 
@@ -41,7 +48,7 @@ logger = logging.getLogger()
 logger.setLevel(logging.DEBUG)
 
 # Ausgabe in eine Datei
-file_handler = logging.FileHandler('transcription_listener.log')
+file_handler = logging.FileHandler(log_file_path)
 file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
 logger.addHandler(file_handler)
 
@@ -146,7 +153,7 @@ def find_keyboard_devices():
 logging.basicConfig(
     level=logging.DEBUG,
     format='%(asctime)s - %(levelname)s - %(message)s',
-    filename='/var/log/transcription_listener.log',
+    filename=log_file_path,
     filemode='a'  # 'a' für Anhängen, 'w' für Überschreiben bei jedem Start
 )
 
