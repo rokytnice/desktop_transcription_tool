@@ -1,18 +1,25 @@
 [Unit]
 Description=Desktop Transcription Tool (Offline)
 Documentation=https://github.com/rokytnice/desktop_transcription_tool
-After=network.target sound.target
-Wants=graphical-session.target
+After=network.target sound.target multi-user.target graphical.target
+Wants=graphical.target
 
 [Service]
 Type=simple
-User=%u
-Environment="DISPLAY=:0"
-Environment="XAUTHORITY=%h/.Xauthority"
-WorkingDirectory=%h/projects/desktop_transcription_tool/offline
-ExecStart=%h/projects/desktop_transcription_tool/offline/.venv/bin/python %h/projects/desktop_transcription_tool/offline/transcription_offline.py
+User=aroc
+Group=aroc
+Environment="AUDIO_DEVICE=8"
+WorkingDirectory=/home/aroc/projects/desktop_transcription_tool/offline
+ExecStart=/home/aroc/projects/desktop_transcription_tool/offline/.venv/bin/python /home/aroc/projects/desktop_transcription_tool/offline/transcription_offline.py
 Restart=on-failure
 RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+# Allow access to input devices and audio
+ProtectSystem=strict
+ProtectHome=no
+NoNewPrivileges=false
 
 [Install]
-WantedBy=graphical-session.target
+WantedBy=graphical.target

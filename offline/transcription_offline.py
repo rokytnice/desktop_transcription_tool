@@ -25,6 +25,17 @@ input_stream = None
 samplerate = 16000
 device_index = None  # Will be selected at startup
 
+# Auto-detect best audio device if AUDIO_DEVICE env var is set
+def get_audio_device_from_env():
+    """Get audio device from environment variable or return None"""
+    env_device = os.environ.get('AUDIO_DEVICE')
+    if env_device:
+        try:
+            return int(env_device)
+        except ValueError:
+            return None
+    return None
+
 # Logger erstellen
 logger = logging.getLogger()
 logger.setLevel(logging.DEBUG)
@@ -65,6 +76,19 @@ def play_stop_recording_sound():
 def select_audio_device():
     """Show available audio input devices and let user select one"""
     global device_index
+
+    # Check for environment variable first (for systemd service)
+    env_device = get_audio_device_from_env()
+    if env_device is not None:
+        try:
+            dev_info = sd.query_devices(env_device)
+            if dev_info['max_input_channels'] > 0:
+                device_index = env_device
+                logger.info(f"Using device from AUDIO_DEVICE env var: {env_device} - {dev_info['name']}")
+                print(f"✓ Using device from environment: {dev_info['name']}\n")
+                return device_index
+        except Exception as e:
+            logger.warning(f"AUDIO_DEVICE env var invalid: {e}")
 
     print("\n=== AVAILABLE MICROPHONE DEVICES (Audio Input) ===\n")
 
