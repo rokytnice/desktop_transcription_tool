@@ -301,8 +301,8 @@ def process_keyboard_events(devices):
 
 def transcribe_with_whisper(audio_file_path):
     try:
-        print("📥 Loading Whisper large model (best quality)...")
-        model = whisper.load_model("large")
+        print("📥 Loading Whisper turbo model (fast, high quality)...")
+        model = whisper.load_model("turbo")
         result = model.transcribe(audio_file_path, language="de", task="transcribe")
 
         transcription = result["text"]
