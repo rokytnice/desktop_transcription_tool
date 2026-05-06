@@ -1,0 +1,18 @@
+[Unit]
+Description=Desktop Transcription Tool (Offline)
+Documentation=https://github.com/rokytnice/desktop_transcription_tool
+After=network.target sound.target
+Wants=graphical-session.target
+
+[Service]
+Type=simple
+User=%u
+Environment="DISPLAY=:0"
+Environment="XAUTHORITY=%h/.Xauthority"
+WorkingDirectory=%h/projects/desktop_transcription_tool/offline
+ExecStart=%h/projects/desktop_transcription_tool/offline/.venv/bin/python %h/projects/desktop_transcription_tool/offline/transcription_offline.py
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=graphical-session.target
