@@ -308,10 +308,23 @@ def process_keyboard_events(devices):
             stop_recording()
         print("\n✓ Goodbye!")
 
+_whisper_model = None
+
+def get_whisper_model():
+    """Load and cache Whisper model on first call"""
+    global _whisper_model
+    if _whisper_model is None:
+        model_name = os.environ.get('WHISPER_MODEL', 'turbo')
+        print(f"📥 Loading Whisper {model_name} model (one-time)...")
+        logger.info(f"Loading Whisper {model_name} model...")
+        _whisper_model = whisper.load_model(model_name)
+        logger.info(f"Whisper {model_name} model loaded")
+        print(f"✓ Whisper {model_name} ready")
+    return _whisper_model
+
 def transcribe_with_whisper(audio_file_path):
     try:
-        print("📥 Loading Whisper turbo model (fast, high quality)...")
-        model = whisper.load_model("turbo")
+        model = get_whisper_model()
         result = model.transcribe(audio_file_path, language="de", task="transcribe")
 
         transcription = result["text"]
@@ -388,6 +401,13 @@ if __name__ == "__main__":
     # Modellname bestimmen
     llm_model = os.environ.get('GEMINI_LLM', 'gemini-2.5-flash-lite-preview-06-17')
     print(f"Verwendetes LLM-Modell: {llm_model}")
+
+    # Pre-load Whisper model (saves time on first recording)
+    try:
+        get_whisper_model()
+    except Exception as e:
+        print(f"Error loading Whisper model: {e}")
+        logger.error(f"Error loading Whisper model: {e}")
 
     # Audio device selection
     try:
