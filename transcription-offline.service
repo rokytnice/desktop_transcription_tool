@@ -8,14 +8,16 @@ Wants=graphical.target
 Type=simple
 User=aroc
 Group=aroc
-Environment="AUDIO_DEVICE=7"
+Environment="AUDIO_DEVICE=16"
+Environment="AUDIO_OUTPUT_DEVICE=16"
+Environment="WHISPER_MODEL=small"
 Environment="XDG_RUNTIME_DIR=/run/user/1000"
 Environment="DISPLAY=:0"
 Environment="XAUTHORITY=/home/aroc/.Xauthority"
 WorkingDirectory=/home/aroc/projects/desktop_transcription_tool/offline
 ExecStart=/home/aroc/projects/desktop_transcription_tool/offline/.venv/bin/python /home/aroc/projects/desktop_transcription_tool/offline/transcription_offline.py
-Restart=on-failure
-RestartSec=10
+Restart=on-abort
+RestartSec=30
 StandardOutput=journal
 StandardError=journal
 
