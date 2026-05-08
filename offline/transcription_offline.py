@@ -75,13 +75,11 @@ _generate_beep_wav(START_BEEP_PATH, frequency=800, duration=0.15, volume=0.5)
 _generate_beep_wav(STOP_BEEP_PATH, frequency=1200, duration=0.2, volume=0.5)
 
 def play_beep(filepath):
-    """Play a WAV file using paplay (non-blocking)"""
-    def _play():
-        try:
-            subprocess.run(["paplay", filepath], check=False, timeout=5)
-        except Exception as e:
-            logger.warning(f"Could not play sound: {e}")
-    threading.Thread(target=_play, daemon=True).start()
+    """Play a WAV file using paplay (blocking, ensures no parallel audio access)"""
+    try:
+        subprocess.run(["paplay", filepath], check=False, timeout=5)
+    except Exception as e:
+        logger.warning(f"Could not play sound: {e}")
 
 def play_start_recording_sound():
     """Play sound when recording starts"""
@@ -162,14 +160,6 @@ def find_keyboard_devices():
     return devices
 
 
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    filename=log_file_path,
-    filemode='a'  # 'a' für Anhängen, 'w' für Überschreiben bei jedem Start
-)
-
-
 def audio_callback(indata, frames, time, status):
     """Callback to capture audio data"""
     global audio_data, recording
@@ -190,8 +180,12 @@ def start_recording():
         logger.info(msg)
         print(msg)
 
+        # Set recording flag FIRST to prevent re-entry during beep
         recording = True
         audio_data = []
+
+        # Play beep BEFORE opening stream to avoid audio system conflicts
+        play_start_recording_sound()
 
         try:
             input_stream = sd.InputStream(
@@ -203,7 +197,6 @@ def start_recording():
             )
             input_stream.start()
             logger.info("InputStream started")
-            play_start_recording_sound()
         except Exception as e:
             logger.error(f"Error starting input stream: {e}")
             recording = False
