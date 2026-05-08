@@ -5,6 +5,8 @@ import soundfile as sf
 import numpy as np
 import os
 import subprocess
+import sys
+import signal
 import time
 import logging
 import whisper
@@ -336,7 +338,10 @@ def monitor_device(device):
     except Exception as e:
         logger.error(f"Error monitoring {device.path}: {e}")
 
+_shutdown_requested = False
+
 def process_keyboard_events(devices):
+    global _shutdown_requested
     threads = []
     for device in devices:
         t = threading.Thread(target=monitor_device, args=(device,), daemon=True)
@@ -344,14 +349,28 @@ def process_keyboard_events(devices):
         threads.append(t)
 
     try:
-        while True:
+        while not _shutdown_requested:
             time.sleep(0.1)
     except KeyboardInterrupt:
-        logger.info("Exiting...")
-        global recording
-        if recording:
+        pass
+
+    # Clean shutdown
+    logger.info("Exiting...")
+    print("\n⏹️  Shutting down...")
+    global recording
+    if recording:
+        try:
             stop_recording()
-        print("\n✓ Goodbye!")
+        except Exception:
+            pass
+    # Close all input devices
+    for device in devices:
+        try:
+            device.close()
+        except Exception:
+            pass
+    print("✓ Goodbye!")
+    os._exit(0)  # Force exit (daemon threads in read_loop won't stop otherwise)
 
 _whisper_model = None
 
@@ -442,7 +461,15 @@ def transcribe_and_output():
         print(f"An error occurred during transcription: {e}")
 
 
+def _signal_handler(signum, frame):
+    global _shutdown_requested
+    print(f"\n⏹️  Received signal {signum}, shutting down...")
+    _shutdown_requested = True
+
 if __name__ == "__main__":
+    # Register signal handlers for clean shutdown
+    signal.signal(signal.SIGINT, _signal_handler)
+    signal.signal(signal.SIGTERM, _signal_handler)
     # Modellname bestimmen
     # Pre-load Whisper model (saves time on first recording)
     try:
