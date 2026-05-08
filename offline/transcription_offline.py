@@ -5,6 +5,8 @@ import soundfile as sf
 import numpy as np
 import os
 import subprocess
+import sys
+import signal
 import time
 import logging
 import whisper
@@ -30,7 +32,8 @@ audio_data = []
 input_stream = None
 
 samplerate = 16000
-device_index = None  # Will be selected at startup
+device_index = None  # Input device, selected at startup
+output_device_index = None  # Output device, selected at startup
 
 # Auto-detect best audio device if AUDIO_DEVICE env var is set
 def get_audio_device_from_env():
@@ -75,13 +78,13 @@ _generate_beep_wav(START_BEEP_PATH, frequency=800, duration=0.15, volume=0.5)
 _generate_beep_wav(STOP_BEEP_PATH, frequency=1200, duration=0.2, volume=0.5)
 
 def play_beep(filepath):
-    """Play a WAV file using paplay (non-blocking)"""
-    def _play():
-        try:
-            subprocess.run(["paplay", filepath], check=False, timeout=5)
-        except Exception as e:
-            logger.warning(f"Could not play sound: {e}")
-    threading.Thread(target=_play, daemon=True).start()
+    """Play a WAV file via sounddevice on selected output device (blocking)"""
+    try:
+        data, fs = sf.read(filepath, dtype='int16')
+        sd.play(data, fs, device=output_device_index, blocking=True)
+        sd.stop()
+    except Exception as e:
+        logger.warning(f"Could not play sound: {e}")
 
 def play_start_recording_sound():
     """Play sound when recording starts"""
@@ -90,6 +93,55 @@ def play_start_recording_sound():
 def play_stop_recording_sound():
     """Play sound when recording stops"""
     play_beep(STOP_BEEP_PATH)
+
+# Audio output device selection
+def select_output_device():
+    """Show available audio output devices and let user select one"""
+    global output_device_index
+
+    # Check env var first
+    env_device = os.environ.get('AUDIO_OUTPUT_DEVICE')
+    if env_device:
+        try:
+            output_device_index = int(env_device)
+            dev_info = sd.query_devices(output_device_index)
+            print(f"✓ Using output from environment: {dev_info['name']}\n")
+            return output_device_index
+        except Exception as e:
+            logger.warning(f"AUDIO_OUTPUT_DEVICE env var invalid: {e}")
+
+    print("\n=== AVAILABLE OUTPUT DEVICES (Lautsprecher/Kopfhörer) ===\n")
+
+    devices_list = []
+    all_devices = sd.query_devices()
+
+    for idx, device in enumerate(all_devices):
+        if device['max_output_channels'] > 0:
+            devices_list.append(idx)
+            is_default = " ← DEFAULT" if idx == sd.default.device[1] else ""
+            print(f"[{len(devices_list)-1}] Device #{idx}: {device['name']}{is_default}")
+            print(f"         Channels: {device['max_output_channels']}, Rate: {device['default_samplerate']} Hz")
+
+    print()
+    if len(devices_list) == 0:
+        logger.warning("No audio output devices found!")
+        output_device_index = None
+        return None
+
+    while True:
+        try:
+            choice = input(f"Select OUTPUT device for beeps [0-{len(devices_list)-1}]: ").strip()
+            choice_idx = int(choice)
+            if choice_idx < 0 or choice_idx >= len(devices_list):
+                print("Invalid selection!")
+                continue
+            output_device_index = devices_list[choice_idx]
+            selected_name = all_devices[output_device_index]['name']
+            print(f"\n✓ Output: {selected_name}\n")
+            logger.info(f"Selected output device {output_device_index}: {selected_name}")
+            return output_device_index
+        except ValueError:
+            print("Please enter a number!")
 
 # Audio device selection
 def select_audio_device():
@@ -162,14 +214,6 @@ def find_keyboard_devices():
     return devices
 
 
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    filename=log_file_path,
-    filemode='a'  # 'a' für Anhängen, 'w' für Überschreiben bei jedem Start
-)
-
-
 def audio_callback(indata, frames, time, status):
     """Callback to capture audio data"""
     global audio_data, recording
@@ -190,8 +234,12 @@ def start_recording():
         logger.info(msg)
         print(msg)
 
+        # Set recording flag FIRST to prevent re-entry during beep
         recording = True
         audio_data = []
+
+        # Play beep BEFORE opening stream to avoid audio system conflicts
+        play_start_recording_sound()
 
         try:
             input_stream = sd.InputStream(
@@ -203,7 +251,6 @@ def start_recording():
             )
             input_stream.start()
             logger.info("InputStream started")
-            play_start_recording_sound()
         except Exception as e:
             logger.error(f"Error starting input stream: {e}")
             recording = False
@@ -291,7 +338,10 @@ def monitor_device(device):
     except Exception as e:
         logger.error(f"Error monitoring {device.path}: {e}")
 
+_shutdown_requested = False
+
 def process_keyboard_events(devices):
+    global _shutdown_requested
     threads = []
     for device in devices:
         t = threading.Thread(target=monitor_device, args=(device,), daemon=True)
@@ -299,14 +349,28 @@ def process_keyboard_events(devices):
         threads.append(t)
 
     try:
-        while True:
+        while not _shutdown_requested:
             time.sleep(0.1)
     except KeyboardInterrupt:
-        logger.info("Exiting...")
-        global recording
-        if recording:
+        pass
+
+    # Clean shutdown
+    logger.info("Exiting...")
+    print("\n⏹️  Shutting down...")
+    global recording
+    if recording:
+        try:
             stop_recording()
-        print("\n✓ Goodbye!")
+        except Exception:
+            pass
+    # Close all input devices
+    for device in devices:
+        try:
+            device.close()
+        except Exception:
+            pass
+    print("✓ Goodbye!")
+    os._exit(0)  # Force exit (daemon threads in read_loop won't stop otherwise)
 
 _whisper_model = None
 
@@ -314,7 +378,7 @@ def get_whisper_model():
     """Load and cache Whisper model on first call"""
     global _whisper_model
     if _whisper_model is None:
-        model_name = os.environ.get('WHISPER_MODEL', 'turbo')
+        model_name = os.environ.get('WHISPER_MODEL', 'small')
         print(f"📥 Loading Whisper {model_name} model (one-time)...")
         logger.info(f"Loading Whisper {model_name} model...")
         _whisper_model = whisper.load_model(model_name)
@@ -397,11 +461,16 @@ def transcribe_and_output():
         print(f"An error occurred during transcription: {e}")
 
 
-if __name__ == "__main__":
-    # Modellname bestimmen
-    llm_model = os.environ.get('GEMINI_LLM', 'gemini-2.5-flash-lite-preview-06-17')
-    print(f"Verwendetes LLM-Modell: {llm_model}")
+def _signal_handler(signum, frame):
+    global _shutdown_requested
+    print(f"\n⏹️  Received signal {signum}, shutting down...")
+    _shutdown_requested = True
 
+if __name__ == "__main__":
+    # Register signal handlers for clean shutdown
+    signal.signal(signal.SIGINT, _signal_handler)
+    signal.signal(signal.SIGTERM, _signal_handler)
+    # Modellname bestimmen
     # Pre-load Whisper model (saves time on first recording)
     try:
         get_whisper_model()
@@ -415,6 +484,18 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"Error selecting audio device: {e}")
         exit(1)
+
+    # Output device selection (for beeps)
+    try:
+        select_output_device()
+    except Exception as e:
+        print(f"Error selecting output device: {e}")
+        # Continue without output device (beeps will use default)
+
+    # Set explicit default devices for sounddevice (prevents I/O combination errors)
+    if device_index is not None and output_device_index is not None:
+        sd.default.device = [device_index, output_device_index]
+        logger.info(f"Default devices set: input={device_index}, output={output_device_index}")
 
     # Konfiguration beim Start ausgeben
     device_info = sd.query_devices(device_index)
