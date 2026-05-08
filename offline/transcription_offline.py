@@ -378,7 +378,7 @@ def get_whisper_model():
     """Load and cache Whisper model on first call"""
     global _whisper_model
     if _whisper_model is None:
-        model_name = os.environ.get('WHISPER_MODEL', 'turbo')
+        model_name = os.environ.get('WHISPER_MODEL', 'small')
         print(f"📥 Loading Whisper {model_name} model (one-time)...")
         logger.info(f"Loading Whisper {model_name} model...")
         _whisper_model = whisper.load_model(model_name)
