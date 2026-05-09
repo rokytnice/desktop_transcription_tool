@@ -86,10 +86,49 @@ cd online && python transcription_online.py
 - Linux (getestet auf Ubuntu 24.04)
 - Audio-Geräte (Mikrofon)
 - xclip (für Clipboard-Funktion)
+- Gruppe `input` für Tastaturzugriff ohne sudo
+
+## ⚙️ Als User-Service einrichten (autostart)
+
+Einmalig ausführen:
+
+```bash
+# 1. User zur input-Gruppe hinzufügen (Tastaturzugriff ohne sudo)
+sudo usermod -aG input $USER
+
+# 2. Ausloggen und wieder einloggen (Gruppe wird aktiv)
+
+# 3. Service aktivieren
+systemctl --user daemon-reload
+systemctl --user enable --now transcription-offline.service
+```
+
+Danach startet der Service automatisch bei jedem Login.
+
+**Verwalten:**
+```bash
+systemctl --user status transcription-offline.service
+systemctl --user restart transcription-offline.service
+systemctl --user stop transcription-offline.service
+journalctl --user -u transcription-offline.service -f   # Live-Log
+```
+
+**Warum User-Service statt System-Service?**
+
+| | System-Service | User-Service |
+|---|---|---|
+| Läuft als | root | $USER |
+| Startet | beim Booten | beim Login |
+| Audio/PipeWire | braucht Workarounds | funktioniert direkt |
+| Verwalten | `sudo systemctl` | `systemctl --user` |
 
 ## 📝 Logs
 
-Logs werden gespeichert in: `transcription_listener.log`
+Logs werden gespeichert in: `~/.transcription/transcription_listener.log`
+
+```bash
+tail -f ~/.transcription/transcription_listener.log
+```
 
 ## 🤝 Beitrag
 

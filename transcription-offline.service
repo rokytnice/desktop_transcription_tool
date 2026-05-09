@@ -9,7 +9,7 @@ Type=simple
 User=aroc
 Group=aroc
 Environment="AUDIO_DEVICE=16"
-Environment="AUDIO_OUTPUT_DEVICE=16"
+Environment="AUDIO_OUTPUT_DEVICE=13"
 Environment="WHISPER_MODEL=small"
 Environment="XDG_RUNTIME_DIR=/run/user/1000"
 Environment="DISPLAY=:0"

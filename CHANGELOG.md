@@ -2,6 +2,36 @@
 
 Alle wichtigen Änderungen werden in dieser Datei dokumentiert.
 
+## [1.2.0] - 2026-05-09
+
+### Added
+- User-Service statt System-Service: `~/.config/systemd/user/transcription-offline.service`
+  - Läuft als normaler User → PipeWire/Audio funktioniert nativ
+  - Kein `DISPLAY`/`XAUTHORITY`-Workaround mehr nötig
+  - Verwalten ohne sudo: `systemctl --user start/stop/status transcription-offline.service`
+- `run_offline.sh` im Projektroot für bequemen Start ohne Verzeichniswechsel
+
+### Changed
+- `run.sh` und `run_offline.sh` starten jetzt ohne `sudo`
+- Voraussetzung: User muss in der Gruppe `input` sein (einmalige Einrichtung)
+
+### Setup (einmalig)
+```bash
+sudo usermod -aG input $USER
+# Ausloggen und wieder einloggen, damit Gruppe aktiv wird
+systemctl --user daemon-reload
+systemctl --user enable --now transcription-offline.service
+```
+
+### System-Service vs. User-Service
+
+| | System-Service | User-Service |
+|---|---|---|
+| Läuft als | root | $USER |
+| Startet | beim Booten | beim Login |
+| Audio | braucht Env-Variablen-Hacks | funktioniert direkt |
+| Verwalten | `sudo systemctl` | `systemctl --user` |
+
 ## [1.1.0] - 2026-04-30
 
 ### Added
