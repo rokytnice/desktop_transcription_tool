@@ -44,7 +44,8 @@ Das installiert alles und erstellt Convenience-Scripts!
 
 ### Offline (Whisper - lokal, kein API Key nötig) ⭐
 ```bash
-./run_offline.sh
+./run_offline.sh                # Standard: Default-Devices, schnell
+./run_offline.sh -H             # Interaktiv: Geräte-Auswahl
 ```
 
 ### Online (Google Speech API - mit API Key)

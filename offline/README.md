@@ -19,7 +19,8 @@ Lokale Spracherkennung mit OpenAI Whisper - **keine API Key erforderlich!**
 ## Start
 
 ```bash
-./run.sh
+./run.sh                  # Default: nutzt Standard-Geräte
+./run.sh -H              # Interaktiv: Geräte-Auswahl-Menü
 ```
 
 ## Bedienung

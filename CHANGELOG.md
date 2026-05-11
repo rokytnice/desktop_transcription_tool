@@ -10,6 +10,10 @@ Alle wichtigen Änderungen werden in dieser Datei dokumentiert.
   - Kein `DISPLAY`/`XAUTHORITY`-Workaround mehr nötig
   - Verwalten ohne sudo: `systemctl --user start/stop/status transcription-offline.service`
 - `run_offline.sh` im Projektroot für bequemen Start ohne Verzeichniswechsel
+- Interaktive Geräte-Auswahl mit `-H` Flag
+  - `./run.sh` → nutzt Default-Devices automatisch (schnell)
+  - `./run.sh -H` → zeigt Geräte-Auswahl-Menü
+  - Umgebungsvariablen (`AUDIO_DEVICE`, `AUDIO_OUTPUT_DEVICE`) haben immer Vorrang
 
 ### Changed
 - `run.sh` und `run_offline.sh` starten jetzt ohne `sudo`
