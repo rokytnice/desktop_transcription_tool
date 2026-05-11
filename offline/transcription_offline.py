@@ -14,6 +14,7 @@ import torch
 import evdev
 from evdev import InputDevice, ecodes, list_devices
 import threading
+import argparse
 
 # Ensure the environment is correctly configured
 os.environ["LC_ALL"] = "de_DE.UTF-8"
@@ -95,8 +96,8 @@ def play_stop_recording_sound():
     play_beep(STOP_BEEP_PATH)
 
 # Audio output device selection
-def select_output_device():
-    """Show available audio output devices and let user select one"""
+def select_output_device(interactive=False):
+    """Show available audio output devices and let user select one, or use default"""
     global output_device_index
 
     # Check env var first
@@ -109,6 +110,13 @@ def select_output_device():
             return output_device_index
         except Exception as e:
             logger.warning(f"AUDIO_OUTPUT_DEVICE env var invalid: {e}")
+
+    # If not interactive, use default device
+    if not interactive:
+        output_device_index = sd.default.device[1]
+        dev_info = sd.query_devices(output_device_index)
+        logger.info(f"Using default output device: {output_device_index} - {dev_info['name']}")
+        return output_device_index
 
     print("\n=== AVAILABLE OUTPUT DEVICES (Lautsprecher/Kopfhörer) ===\n")
 
@@ -144,8 +152,8 @@ def select_output_device():
             print("Please enter a number!")
 
 # Audio device selection
-def select_audio_device():
-    """Show available audio input devices and let user select one"""
+def select_audio_device(interactive=False):
+    """Show available audio input devices and let user select one, or use default"""
     global device_index
 
     # Check for environment variable first (for systemd service)
@@ -160,6 +168,14 @@ def select_audio_device():
                 return device_index
         except Exception as e:
             logger.warning(f"AUDIO_DEVICE env var invalid: {e}")
+
+    # If not interactive, use default device
+    if not interactive:
+        device_index = sd.default.device[0]
+        dev_info = sd.query_devices(device_index)
+        if dev_info['max_input_channels'] > 0:
+            logger.info(f"Using default input device: {device_index} - {dev_info['name']}")
+            return device_index
 
     print("\n=== AVAILABLE MICROPHONE DEVICES (Audio Input) ===\n")
 
@@ -467,6 +483,12 @@ def _signal_handler(signum, frame):
     _shutdown_requested = True
 
 if __name__ == "__main__":
+    # Parse command-line arguments
+    parser = argparse.ArgumentParser(description="Desktop Transcription Tool (Offline)")
+    parser.add_argument('-H', '--interactive', action='store_true',
+                        help='Show device selection menu (default: use default devices)')
+    args = parser.parse_args()
+
     # Register signal handlers for clean shutdown
     signal.signal(signal.SIGINT, _signal_handler)
     signal.signal(signal.SIGTERM, _signal_handler)
@@ -480,14 +502,14 @@ if __name__ == "__main__":
 
     # Audio device selection
     try:
-        select_audio_device()
+        select_audio_device(interactive=args.interactive)
     except Exception as e:
         print(f"Error selecting audio device: {e}")
         exit(1)
 
     # Output device selection (for beeps)
     try:
-        select_output_device()
+        select_output_device(interactive=args.interactive)
     except Exception as e:
         print(f"Error selecting output device: {e}")
         # Continue without output device (beeps will use default)
