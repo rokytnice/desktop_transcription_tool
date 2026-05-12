@@ -99,12 +99,18 @@ sudo usermod -aG input $USER
 
 # 2. Ausloggen und wieder einloggen (Gruppe wird aktiv)
 
-# 3. Service aktivieren
+# 3. Service-Datei installieren
+mkdir -p ~/.config/systemd/user/
+cp transcription-offline.service ~/.config/systemd/user/
+
+# 4. Service aktivieren
 systemctl --user daemon-reload
 systemctl --user enable --now transcription-offline.service
 ```
 
 Danach startet der Service automatisch bei jedem Login.
+
+**Wichtig:** Die Service-Datei enthält `DISPLAY=:0` und `XAUTHORITY`, damit xclip auf die Zwischenablage zugreifen kann. Ohne diese Variablen funktioniert die Transkription, aber der Text wird nicht in die Zwischenablage kopiert.
 
 **Verwalten:**
 ```bash

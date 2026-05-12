@@ -2,6 +2,14 @@
 
 Alle wichtigen Änderungen werden in dieser Datei dokumentiert.
 
+## [1.2.1] - 2026-05-12
+
+### Fixed
+- User-Service: Clipboard-Zugriff repariert
+  - `DISPLAY=:0` und `XAUTHORITY` hinzugefügt, damit xclip funktioniert
+  - Vorher: Transkription funktionierte, aber Text ging nicht in Zwischenablage
+  - Jetzt: Service und run_offline.sh arbeiten identisch
+
 ## [1.2.0] - 2026-05-09
 
 ### Added
