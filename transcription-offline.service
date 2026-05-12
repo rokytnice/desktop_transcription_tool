@@ -1,19 +1,15 @@
 [Unit]
 Description=Desktop Transcription Tool (Offline)
 Documentation=https://github.com/rokytnice/desktop_transcription_tool
-After=network.target sound.target multi-user.target graphical.target
-Wants=graphical.target
+After=pipewire.service pipewire-pulse.service
 
 [Service]
 Type=simple
-User=aroc
-Group=aroc
-Environment="AUDIO_DEVICE=16"
-Environment="AUDIO_OUTPUT_DEVICE=13"
+Environment="AUDIO_DEVICE=7"
+Environment="AUDIO_OUTPUT_DEVICE=7"
 Environment="WHISPER_MODEL=small"
-Environment="XDG_RUNTIME_DIR=/run/user/1000"
 Environment="DISPLAY=:0"
-Environment="XAUTHORITY=/home/aroc/.Xauthority"
+Environment="XAUTHORITY=%h/.Xauthority"
 WorkingDirectory=/home/aroc/projects/desktop_transcription_tool/offline
 ExecStart=/home/aroc/projects/desktop_transcription_tool/offline/.venv/bin/python /home/aroc/projects/desktop_transcription_tool/offline/transcription_offline.py
 Restart=on-abort
@@ -21,10 +17,5 @@ RestartSec=30
 StandardOutput=journal
 StandardError=journal
 
-# Allow access to input devices and audio
-ProtectSystem=strict
-ProtectHome=no
-NoNewPrivileges=false
-
 [Install]
-WantedBy=graphical.target
+WantedBy=default.target
