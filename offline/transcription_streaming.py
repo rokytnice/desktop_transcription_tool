@@ -130,6 +130,53 @@ def type_text_in_active_window(text):
     except Exception as e:
         logger.error(f"Error typing text: {e}")
 
+def select_output_device(interactive=False):
+    """Select audio output device for beeps"""
+    global output_device_index
+
+    env_device = os.environ.get('AUDIO_OUTPUT_DEVICE')
+    if env_device:
+        try:
+            output_device_index = int(env_device)
+            dev_info = sd.query_devices(output_device_index)
+            logger.info(f"Using output from environment: {output_device_index}")
+            return output_device_index
+        except Exception as e:
+            logger.warning(f"AUDIO_OUTPUT_DEVICE env var invalid: {e}")
+
+    if not interactive:
+        output_device_index = sd.default.device[1]
+        logger.info(f"Using default output device: {output_device_index}")
+        return output_device_index
+
+    print("\n=== AVAILABLE OUTPUT DEVICES ===\n")
+    devices_list = []
+    all_devices = sd.query_devices()
+
+    for idx, device in enumerate(all_devices):
+        if device['max_output_channels'] > 0:
+            devices_list.append(idx)
+            is_default = " ← DEFAULT" if idx == sd.default.device[1] else ""
+            print(f"[{len(devices_list)-1}] Device #{idx}: {device['name']}{is_default}")
+            print(f"         Channels: {device['max_output_channels']}, Rate: {device['default_samplerate']} Hz")
+
+    print()
+    if len(devices_list) == 0:
+        logger.warning("No audio output devices found!")
+        return None
+
+    while True:
+        try:
+            choice = input(f"Select OUTPUT device [0-{len(devices_list)-1}]: ").strip()
+            choice_idx = int(choice)
+            if choice_idx < 0 or choice_idx >= len(devices_list):
+                continue
+            output_device_index = devices_list[choice_idx]
+            logger.info(f"Selected output device {output_device_index}")
+            return output_device_index
+        except ValueError:
+            pass
+
 def find_keyboard_devices():
     """Find keyboard input devices"""
     devices = []
@@ -301,6 +348,11 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"Error selecting audio device: {e}")
         sys.exit(1)
+
+    try:
+        select_output_device(interactive=args.interactive)
+    except Exception as e:
+        logger.warning(f"Error selecting output device: {e}")
 
     device_info = sd.query_devices(device_index)
     print(f"\n{'='*60}")
