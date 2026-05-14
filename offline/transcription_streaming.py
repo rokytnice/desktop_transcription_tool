@@ -280,47 +280,73 @@ class StreamingTranscriber:
             recording = False
             logger.info("Streaming transcription stopped")
 
-def listen_for_double_alt(keyboard_devices):
-    """Listen for Alt+Alt double tap to start/stop streaming"""
-    selector = evdev.select.EpollSelector()
-    for dev in keyboard_devices:
-        selector.add(dev.fd, dev)
+def monitor_keyboard_device(device):
+    """Monitor single keyboard device for Alt+Alt"""
+    global _shutdown_requested
 
-    alt_press_time = None
+    alt_press_times = []
+    DOUBLE_TAP_TIMEOUT = 0.5
     streaming = None
 
-    logger.info(f"Listening for Alt+Alt on {len(keyboard_devices)} devices...")
-    print("Press Alt twice to start/stop streaming transcription")
-
     try:
-        while not _shutdown_requested:
-            r, _, _ = selector.select(timeout=0.1)
-            for fd in r:
-                device = selector.fdmap[fd]
-                try:
-                    for event in device.read():
-                        if event.type == ecodes.EV_KEY:
-                            if event.code == ecodes.KEY_LEFTALT or event.code == ecodes.KEY_RIGHTALT:
-                                if event.value == 1:  # Key press
-                                    now = time.time()
-                                    if alt_press_time is None or (now - alt_press_time) > 0.5:
-                                        alt_press_time = now
-                                    else:
-                                        logger.info("Alt+Alt detected - toggling streaming")
-                                        if streaming is None or not streaming.is_recording:
-                                            streaming = StreamingTranscriber()
-                                            streaming.start_streaming()
-                                        else:
-                                            streaming.is_recording = False
-                                        alt_press_time = None
-                except:
-                    pass
+        logger.info(f"Listening on: {device.path} ({device.name})")
+        for event in device.read_loop():
+            if _shutdown_requested:
+                break
 
-    except KeyboardInterrupt:
-        pass
+            if event.type == ecodes.EV_KEY:
+                key_event = evdev.categorize(event)
+                keycode = key_event.keycode
+                keystate = key_event.keystate
+
+                if keycode in ['KEY_LEFTALT', 'KEY_RIGHTALT'] and keystate == 1:
+                    current_time = time.time()
+                    alt_press_times[:] = [t for t in alt_press_times if current_time - t < DOUBLE_TAP_TIMEOUT]
+                    alt_press_times.append(current_time)
+
+                    logger.debug(f"Alt press #{len(alt_press_times)}")
+
+                    if len(alt_press_times) >= 2:
+                        logger.info(f"Alt+Alt detected - toggling streaming")
+
+                        if streaming is None or not streaming.is_recording:
+                            streaming = StreamingTranscriber()
+                            streaming.start_streaming()
+                        else:
+                            streaming.is_recording = False
+
+                        alt_press_times.clear()
+
+    except Exception as e:
+        logger.error(f"Error monitoring {device.path}: {e}")
     finally:
         if streaming and streaming.is_recording:
             streaming.is_recording = False
+
+def listen_for_double_alt(keyboard_devices):
+    """Listen for Alt+Alt on all keyboard devices using threads"""
+    threads = []
+    for device in keyboard_devices:
+        t = threading.Thread(target=monitor_keyboard_device, args=(device,), daemon=True)
+        t.start()
+        threads.append(t)
+
+    try:
+        while not _shutdown_requested:
+            time.sleep(0.1)
+    except KeyboardInterrupt:
+        pass
+
+    logger.info("Exiting...")
+    print("\n⏹️  Shutting down...")
+
+    for device in keyboard_devices:
+        try:
+            device.close()
+        except:
+            pass
+
+    os._exit(0)
 
 def _signal_handler(signum, frame):
     global _shutdown_requested
