@@ -484,10 +484,21 @@ def _signal_handler(signum, frame):
 
 if __name__ == "__main__":
     # Parse command-line arguments
-    parser = argparse.ArgumentParser(description="Desktop Transcription Tool (Offline)")
+    parser = argparse.ArgumentParser(description="Desktop Transcription Tool (Offline) - Alt+Alt to record")
     parser.add_argument('-H', '--interactive', action='store_true',
                         help='Show device selection menu (default: use default devices)')
     args = parser.parse_args()
+
+    print("\n" + "="*60)
+    print("🎤 Desktop Transcription Tool (Offline)")
+    print("="*60)
+
+    if args.interactive:
+        print("Mode: Interactive (device selection)")
+    else:
+        print("Mode: Auto (using default devices)")
+
+    print("\nLoading Whisper model (may take 30-60 seconds on first run)...")
 
     # Register signal handlers for clean shutdown
     signal.signal(signal.SIGINT, _signal_handler)
@@ -496,6 +507,7 @@ if __name__ == "__main__":
     # Pre-load Whisper model (saves time on first recording)
     try:
         get_whisper_model()
+        print("✓ Whisper model loaded\n")
     except Exception as e:
         print(f"Error loading Whisper model: {e}")
         logger.error(f"Error loading Whisper model: {e}")
