@@ -1,8 +1,8 @@
 #!/bin/bash
 cd "$(dirname "$0")"
 
-# Only set default env vars if NOT using interactive mode (-H)
-if [[ "$*" != *"-H"* ]] && [[ "$*" != *"--interactive"* ]]; then
+# Set default env vars ONLY if -d/--default is passed
+if [[ "$*" == *"-d"* ]] || [[ "$*" == *"--default"* ]]; then
     export AUDIO_DEVICE=${AUDIO_DEVICE:-0}
     export AUDIO_OUTPUT_DEVICE=${AUDIO_OUTPUT_DEVICE:-19}
 fi

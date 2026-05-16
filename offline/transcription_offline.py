@@ -485,9 +485,12 @@ def _signal_handler(signum, frame):
 if __name__ == "__main__":
     # Parse command-line arguments
     parser = argparse.ArgumentParser(description="Desktop Transcription Tool (Offline)")
-    parser.add_argument('-H', '--interactive', action='store_true',
-                        help='Show device selection menu (default: use default devices)')
+    parser.add_argument('-d', '--default', action='store_true',
+                        help='Use default devices without selection menu (default: show menu)')
     args = parser.parse_args()
+
+    # Interactive mode is TRUE by default, only FALSE if -d is passed
+    interactive = not args.default
 
     # Register signal handlers for clean shutdown
     signal.signal(signal.SIGINT, _signal_handler)
@@ -502,14 +505,14 @@ if __name__ == "__main__":
 
     # Audio device selection
     try:
-        select_audio_device(interactive=args.interactive)
+        select_audio_device(interactive=interactive)
     except Exception as e:
         print(f"Error selecting audio device: {e}")
         exit(1)
 
     # Output device selection (for beeps)
     try:
-        select_output_device(interactive=args.interactive)
+        select_output_device(interactive=interactive)
     except Exception as e:
         print(f"Error selecting output device: {e}")
         # Continue without output device (beeps will use default)
