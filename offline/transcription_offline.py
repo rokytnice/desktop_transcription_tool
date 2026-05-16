@@ -292,8 +292,9 @@ def start_recording():
         recording = True
         audio_data = []
 
-        # Play beep BEFORE opening stream to avoid audio system conflicts
-        play_start_recording_sound()
+        # Skip beep if input + output are the same device (avoids PaError -9985)
+        if device_index != output_device_index:
+            play_start_recording_sound()
 
         try:
             input_stream = sd.InputStream(
@@ -308,6 +309,21 @@ def start_recording():
         except Exception as e:
             logger.error(f"Error starting input stream: {e}")
             recording = False
+            # Try fallback to default device
+            try:
+                logger.info("Trying fallback to default input device...")
+                input_stream = sd.InputStream(
+                    samplerate=device_samplerate,
+                    channels=1,
+                    dtype='int16',
+                    callback=audio_callback
+                )
+                input_stream.start()
+                recording = True
+                logger.info("Fallback InputStream started")
+            except Exception as e2:
+                logger.error(f"Fallback also failed: {e2}")
+                recording = False
 
 def stop_recording():
     global recording, audio_data, input_stream
@@ -389,6 +405,9 @@ def monitor_device(device):
                             # Reset the press counter
                             alt_press_times.clear()
 
+    except OSError as e:
+        if not _shutdown_requested:
+            logger.warning(f"Device {device.path} lost ({e}), will rescan...")
     except Exception as e:
         logger.error(f"Error monitoring {device.path}: {e}")
 
@@ -396,15 +415,33 @@ _shutdown_requested = False
 
 def process_keyboard_events(devices):
     global _shutdown_requested
-    threads = []
-    for device in devices:
-        t = threading.Thread(target=monitor_device, args=(device,), daemon=True)
-        t.start()
-        threads.append(t)
+
+    def start_threads(devs):
+        threads = []
+        for device in devs:
+            t = threading.Thread(target=monitor_device, args=(device,), daemon=True)
+            t.start()
+            threads.append(t)
+        return threads
+
+    threads = start_threads(devices)
+    active_paths = {d.path for d in devices}
 
     try:
         while not _shutdown_requested:
-            time.sleep(0.1)
+            time.sleep(5)
+            # Check if threads are still alive, rescan if needed
+            if not _shutdown_requested and not any(t.is_alive() for t in threads):
+                logger.warning("All keyboard threads died, rescanning devices...")
+                try:
+                    new_devices = find_keyboard_devices()
+                    new_paths = {d.path for d in new_devices}
+                    if new_paths != active_paths:
+                        logger.info(f"Keyboard devices changed, restarting monitoring...")
+                    threads = start_threads(new_devices)
+                    active_paths = new_paths
+                except Exception as e:
+                    logger.error(f"Rescan failed: {e}")
     except KeyboardInterrupt:
         pass
 
