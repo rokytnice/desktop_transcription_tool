@@ -151,6 +151,44 @@ def select_output_device(interactive=False):
         except ValueError:
             print("Please enter a number!")
 
+# Select single device for both input and output
+def select_auto_device():
+    """Select ONE device for both input and output"""
+    global device_index, output_device_index
+
+    print("\n=== SELECT DEVICE FOR INPUT + OUTPUT ===\n")
+
+    devices_list = []
+    all_devices = sd.query_devices()
+
+    # Show devices that have both input AND output
+    for idx, device in enumerate(all_devices):
+        if device['max_input_channels'] > 0 and device['max_output_channels'] > 0:
+            devices_list.append(idx)
+            is_default = " ← DEFAULT" if idx == sd.default.device[0] else ""
+            print(f"[{len(devices_list)-1}] Device #{idx}: {device['name']}{is_default}")
+            print(f"         Input: {device['max_input_channels']}ch, Output: {device['max_output_channels']}ch, Rate: {device['default_samplerate']} Hz")
+
+    print()
+    if len(devices_list) == 0:
+        raise RuntimeError("No devices with both input and output found!")
+
+    while True:
+        try:
+            choice = input(f"Select device [0-{len(devices_list)-1}]: ").strip()
+            choice_idx = int(choice)
+            if choice_idx < 0 or choice_idx >= len(devices_list):
+                print("Invalid selection!")
+                continue
+            device_index = devices_list[choice_idx]
+            output_device_index = devices_list[choice_idx]
+            selected_name = all_devices[device_index]['name']
+            print(f"\n✓ Using: {selected_name} (Input + Output)\n")
+            logger.info(f"Selected device {device_index} for both input and output: {selected_name}")
+            return device_index
+        except ValueError:
+            print("Please enter a number!")
+
 # Audio device selection
 def select_audio_device(interactive=False):
     """Show available audio input devices and let user select one, or use default"""
@@ -486,11 +524,14 @@ if __name__ == "__main__":
     # Parse command-line arguments
     parser = argparse.ArgumentParser(description="Desktop Transcription Tool (Offline)")
     parser.add_argument('-d', '--default', action='store_true',
-                        help='Use default devices without selection menu (default: show menu)')
+                        help='Use default devices without selection menu')
+    parser.add_argument('-a', '--auto', action='store_true',
+                        help='Select ONE device for input AND output')
     args = parser.parse_args()
 
     # Interactive mode is TRUE by default, only FALSE if -d is passed
     interactive = not args.default
+    auto_device = args.auto
 
     # Register signal handlers for clean shutdown
     signal.signal(signal.SIGINT, _signal_handler)
@@ -503,19 +544,23 @@ if __name__ == "__main__":
         print(f"Error loading Whisper model: {e}")
         logger.error(f"Error loading Whisper model: {e}")
 
-    # Audio device selection
+    # Device selection
     try:
-        select_audio_device(interactive=interactive)
+        if auto_device:
+            # Auto mode: select ONE device for input + output
+            select_auto_device()
+        else:
+            # Normal mode: select input and output separately
+            select_audio_device(interactive=interactive)
+            # Output device selection (for beeps)
+            try:
+                select_output_device(interactive=interactive)
+            except Exception as e:
+                print(f"Error selecting output device: {e}")
+                # Continue without output device (beeps will use default)
     except Exception as e:
         print(f"Error selecting audio device: {e}")
         exit(1)
-
-    # Output device selection (for beeps)
-    try:
-        select_output_device(interactive=interactive)
-    except Exception as e:
-        print(f"Error selecting output device: {e}")
-        # Continue without output device (beeps will use default)
 
     # Set explicit default devices for sounddevice (prevents I/O combination errors)
     if device_index is not None and output_device_index is not None:
