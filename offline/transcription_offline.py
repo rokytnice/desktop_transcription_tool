@@ -522,11 +522,31 @@ def _signal_handler(signum, frame):
 
 if __name__ == "__main__":
     # Parse command-line arguments
-    parser = argparse.ArgumentParser(description="Desktop Transcription Tool (Offline)")
+    parser = argparse.ArgumentParser(
+        description="Desktop Transcription Tool (Offline) - Spracherkennung mit OpenAI Whisper",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Bedienung:
+  Alt+Alt          Aufnahme starten
+  Alt+Alt          Aufnahme stoppen + transkribieren
+  Ctrl+C           Programm beenden
+
+Umgebungsvariablen:
+  AUDIO_DEVICE          Input-Device Index (überschreibt Auswahl)
+  AUDIO_OUTPUT_DEVICE   Output-Device Index (überschreibt Auswahl)
+  WHISPER_MODEL         Modell (tiny/base/small/medium/large, Standard: small)
+
+Beispiele:
+  ./run_offline.sh                     Interaktive Geräteauswahl (Standard)
+  ./run_offline.sh -d                  Schnellstart mit Default-Geräten
+  ./run_offline.sh -a                  Ein Gerät für Input + Output
+  AUDIO_DEVICE=7 ./run_offline.sh -d   Jabra als Input, Default-Output
+        """
+    )
     parser.add_argument('-d', '--default', action='store_true',
-                        help='Use default devices without selection menu')
+                        help='Schnellstart: Default-Geräte ohne Auswahl-Menü (Device 0 + 19)')
     parser.add_argument('-a', '--auto', action='store_true',
-                        help='Select ONE device for input AND output')
+                        help='Ein Gerät für Input UND Output auswählen (z.B. Jabra Headset)')
     args = parser.parse_args()
 
     # Interactive mode is TRUE by default, only FALSE if -d is passed
