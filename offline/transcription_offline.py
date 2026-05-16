@@ -79,13 +79,19 @@ _generate_beep_wav(START_BEEP_PATH, frequency=800, duration=0.15, volume=0.5)
 _generate_beep_wav(STOP_BEEP_PATH, frequency=1200, duration=0.2, volume=0.5)
 
 def play_beep(filepath):
-    """Play a WAV file via sounddevice on selected output device (blocking)"""
+    """Play a WAV file via paplay (PipeWire/PulseAudio - no ALSA conflicts)"""
     try:
-        data, fs = sf.read(filepath, dtype='int16')
-        sd.play(data, fs, device=output_device_index, blocking=True)
-        sd.stop()
+        subprocess.run(['paplay', filepath], timeout=2, check=True)
+    except FileNotFoundError:
+        # Fallback to sounddevice if paplay not available
+        try:
+            data, fs = sf.read(filepath, dtype='int16')
+            sd.play(data, fs, device=output_device_index, blocking=True)
+            sd.stop()
+        except Exception as e:
+            logger.warning(f"Could not play sound: {e}")
     except Exception as e:
-        logger.warning(f"Could not play sound: {e}")
+        logger.warning(f"Could not play sound via paplay: {e}")
 
 def play_start_recording_sound():
     """Play sound when recording starts"""
@@ -292,9 +298,7 @@ def start_recording():
         recording = True
         audio_data = []
 
-        # Skip beep if input + output are the same device (avoids PaError -9985)
-        if device_index != output_device_index:
-            play_start_recording_sound()
+        play_start_recording_sound()
 
         try:
             input_stream = sd.InputStream(
