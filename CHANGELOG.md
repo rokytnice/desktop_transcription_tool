@@ -2,6 +2,32 @@
 
 Alle wichtigen Änderungen werden in dieser Datei dokumentiert.
 
+## [1.3.0] - 2026-05-16
+
+### Added
+- Neuer Modus `-a`/`--auto`: Ein Gerät für Input + Output auswählen
+  - Praktisch für Headsets mit Mikrofon (z.B. Jabra SPEAK 510)
+  - Zeigt nur Geräte mit Input + Output Kanälen
+- Verbesserter `--help` Output mit vollständiger Dokumentation
+  - Tastenkürzel (Alt+Alt, Ctrl+C)
+  - Alle Umgebungsvariablen erklärt
+  - Konkrete Beispiele mit Kommandos
+- Täglicher Trivy Security Scan (cron, 2:00 Uhr)
+  - Scannt `/home/aroc/projects` auf Vulnerabilities
+  - Reports in `~/.transcription/trivy-reports/`
+  - Automatische Bereinigung nach 7 Tagen
+
+### Changed
+- Start-Verhalten umgekehrt:
+  - `./run_offline.sh` → Interaktive Geräteauswahl (war: kein Menü)
+  - `./run_offline.sh -d` → Schnellstart mit Defaults (ersetzt altes Default-Verhalten)
+  - `./run_offline.sh -a` → Ein Gerät für Input + Output
+- Argumente werden jetzt korrekt durch Wrapper-Scripts weitergegeben (`"$@"`)
+
+### Fixed
+- `-H` Flag funktioniert jetzt in `run_offline.sh` und `offline/run.sh`
+- Argumente wurden nicht an Python-Script weitergegeben (fehlende `"$@"`)
+
 ## [1.2.1] - 2026-05-12
 
 ### Fixed
