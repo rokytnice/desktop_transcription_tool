@@ -27,9 +27,7 @@ sudo apt-get install -y -qq \
     python3.12 \
     python3.12-venv \
     python3.12-dev \
-    xclip \
-    xsel \
-    xdotool \
+    wl-clipboard \
     alsa-utils \
     pulseaudio-utils \
     portaudio19-dev \

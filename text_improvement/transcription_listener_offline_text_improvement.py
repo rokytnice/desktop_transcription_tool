@@ -153,16 +153,14 @@ def enhance_text_with_llm(text):
 
 
 def type_text_in_active_window(text):
-    """Gibt den Text ins aktive Fenster ein."""
-    time.sleep(0.5)  # Wartezeit für den Fokus auf das aktive Fenster
+    """Kopiert den Text in die Zwischenablage (Wayland)."""
     try:
-        for char in text:
-            if ord(char) > 127:  # Nicht-ASCII-Zeichen
-                subprocess.run(["xdotool", "key", f"U{ord(char):04x}"], check=True)
-            else:
-                subprocess.run(["xdotool", "type", char], check=True)
-    except subprocess.CalledProcessError as e:
-        print(f"Error typing text: {e}")
+        process = subprocess.Popen(["wl-copy"], stdin=subprocess.PIPE)
+        process.communicate(text.encode('utf-8'))
+        print("✓ Text in Zwischenablage kopiert (wl-copy)")
+    except FileNotFoundError:
+        print("❌ wl-copy nicht gefunden — install: sudo apt install wl-clipboard")
+        print(f"   Text: {text}")
 
 
 def transcribe_and_output():

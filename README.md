@@ -64,7 +64,7 @@ cd online && python transcription_online.py
 
 | Tool | Features | Anforderungen |
 |------|----------|---------------|
-| **Offline** | 🎙️ Echtzeit, 🤖 Whisper, 🇩🇪 Deutsch, 📋 Clipboard | Python 3.12, xclip |
+| **Offline** | 🎙️ Echtzeit, 🤖 Whisper, 🇩🇪 Deutsch, 📋 Clipboard | Python 3.12, wl-clipboard |
 | **Online** | ☁️ Google API, 🎙️ Mikrofon, 📝 Auto-Type | API Key, Internet |
 | **Text Improvement** | ✨ LLM-basierte Verbesserung | Google Gemini API |
 
@@ -86,7 +86,7 @@ cd online && python transcription_online.py
 - Python 3.12+
 - Linux (getestet auf Ubuntu 24.04)
 - Audio-Geräte (Mikrofon)
-- xclip (für Clipboard-Funktion)
+- wl-clipboard (für Clipboard-Funktion, Wayland)
 - Gruppe `input` für Tastaturzugriff ohne sudo
 
 ## ⚙️ Als User-Service einrichten (autostart)
@@ -110,7 +110,7 @@ systemctl --user enable --now transcription-offline.service
 
 Danach startet der Service automatisch bei jedem Login.
 
-**Wichtig:** Die Service-Datei enthält `DISPLAY=:0` und `XAUTHORITY`, damit xclip auf die Zwischenablage zugreifen kann. Ohne diese Variablen funktioniert die Transkription, aber der Text wird nicht in die Zwischenablage kopiert.
+**Wichtig:** Die Service-Datei enthält `WAYLAND_DISPLAY=wayland-0` und `XDG_RUNTIME_DIR`, damit `wl-copy` auf die Zwischenablage zugreifen kann.
 
 **Verwalten:**
 ```bash

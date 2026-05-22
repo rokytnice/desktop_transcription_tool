@@ -35,7 +35,7 @@ Text wird automatisch in die Zwischenablage kopiert → **Ctrl+V** zum Einfügen
 ## System-Anforderungen
 
 - Python 3.12+
-- xclip (für Clipboard)
+- wl-clipboard (für Clipboard, Wayland)
 - Audio-Geräte (Mikrofon + Lautsprecher)
 - ~2GB RAM für Whisper-Modell
 
@@ -52,5 +52,5 @@ aplay -L  # Zeige verfügbare Audio-Geräte
 
 **Kein Clipboard?**
 ```bash
-sudo apt install xclip xsel
+sudo apt install wl-clipboard
 ```

@@ -129,15 +129,12 @@ def transcribe_audio(audio_file_path, api_key):
 
 
 def type_text_in_active_window(text):
-    time.sleep(0.5)
     try:
-        for char in text:
-            if ord(char) > 127:
-                subprocess.run(["xdotool", "key", f"U{ord(char):04x}"], check=True)
-            else:
-                subprocess.run(["xdotool", "type", char], check=True)
-    except subprocess.CalledProcessError as e:
-        logger.error(f"Error typing text: {e}")
+        process = subprocess.Popen(["wl-copy"], stdin=subprocess.PIPE)
+        process.communicate(text.encode('utf-8'))
+        logger.info("Text copied to clipboard using wl-copy")
+    except FileNotFoundError:
+        logger.error("wl-copy not found — install: sudo apt install wl-clipboard")
 
 
 def transcribe_and_output():
