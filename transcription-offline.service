@@ -8,8 +8,8 @@ Type=simple
 Environment="AUDIO_DEVICE=7"
 Environment="AUDIO_OUTPUT_DEVICE=7"
 Environment="WHISPER_MODEL=small"
-Environment="DISPLAY=:0"
-Environment="XAUTHORITY=%h/.Xauthority"
+Environment="WAYLAND_DISPLAY=wayland-0"
+Environment="XDG_RUNTIME_DIR=/run/user/1000"
 WorkingDirectory=/home/aroc/projects/desktop_transcription_tool/offline
 ExecStart=/home/aroc/projects/desktop_transcription_tool/offline/.venv/bin/python /home/aroc/projects/desktop_transcription_tool/offline/transcription_offline.py
 Restart=on-abort

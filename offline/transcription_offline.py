@@ -496,47 +496,22 @@ def transcribe_with_whisper(audio_file_path):
         raise
 
 def type_text_in_active_window(text):
-    """Copy text to clipboard using wl-copy (Wayland), xclip or xsel (X11)"""
+    """Copy text to clipboard using wl-copy (Wayland)"""
     print(f"\n📋 Copying {len(text)} characters to clipboard...")
     logger.info(f"Copying to clipboard: {text}")
 
     try:
-        # Try wl-copy first (Wayland)
-        result = subprocess.run(["which", "wl-copy"], capture_output=True)
-        if result.returncode == 0:
-            process = subprocess.Popen(["wl-copy"], stdin=subprocess.PIPE)
-            process.communicate(text.encode('utf-8'))
-            print(f"✓ Text copied to clipboard (wl-copy)")
-            print(f"\n🖱️  Now use Ctrl+V to paste!\n")
-            logger.info("Text copied to clipboard using wl-copy")
-            return
+        process = subprocess.Popen(["wl-copy"], stdin=subprocess.PIPE)
+        process.communicate(text.encode('utf-8'))
+        print(f"✓ Text copied to clipboard (wl-copy)")
+        print(f"\n🖱️  Now use Ctrl+V to paste!\n")
+        logger.info("Text copied to clipboard using wl-copy")
 
-        # Fallback: xclip (X11)
-        result = subprocess.run(["which", "xclip"], capture_output=True)
-        if result.returncode == 0:
-            process = subprocess.Popen(["xclip", "-selection", "clipboard"], stdin=subprocess.PIPE)
-            process.communicate(text.encode('utf-8'))
-            print(f"✓ Text copied to clipboard (xclip)")
-            print(f"\n🖱️  Now use Ctrl+V to paste!\n")
-            logger.info("Text copied to clipboard using xclip")
-            return
-
-        # Fallback: xsel (X11)
-        result = subprocess.run(["which", "xsel"], capture_output=True)
-        if result.returncode == 0:
-            process = subprocess.Popen(["xsel", "-bi"], stdin=subprocess.PIPE)
-            process.communicate(text.encode('utf-8'))
-            print(f"✓ Text copied to clipboard (xsel)")
-            print(f"\n🖱️  Now use Ctrl+V to paste!\n")
-            logger.info("Text copied to clipboard using xsel")
-            return
-
-        # No clipboard tool found
-        print("❌ ERROR: No clipboard tool found (wl-copy, xclip or xsel)!")
-        print(f"   Install: sudo apt install wl-clipboard   # Wayland")
-        print(f"         or sudo apt install xclip          # X11")
+    except FileNotFoundError:
+        print("❌ ERROR: wl-copy not found!")
+        print(f"   Install: sudo apt install wl-clipboard")
         print(f"   Text: {text}")
-        logger.error("No clipboard tool available")
+        logger.error("wl-copy not found")
 
     except Exception as e:
         print(f"❌ Error copying to clipboard: {e}")
