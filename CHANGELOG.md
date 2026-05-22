@@ -2,6 +2,23 @@
 
 Alle wichtigen Änderungen werden in dieser Datei dokumentiert.
 
+## [1.4.0] - 2026-05-22
+
+### Added
+- Wayland-Unterstützung für Clipboard via `wl-copy` (wl-clipboard)
+  - Alle Skripte (offline, online, text_improvement) nutzen jetzt `wl-copy`
+  - Systemd-Service: `DISPLAY`/`XAUTHORITY` durch `WAYLAND_DISPLAY`/`XDG_RUNTIME_DIR` ersetzt
+
+### Changed
+- Geräteauswahl-Menü: Enter ohne Eingabe wählt jetzt Default-Gerät
+  - Prompt zeigt `Enter=Default` als Hinweis
+- Beep-Sound: `paplay` statt `sounddevice` (kein ALSA/PipeWire-Konflikt mehr)
+- Auto-Restart: `run_offline.sh` startet bei Absturz automatisch neu
+
+### Removed
+- Alle X11-Abhängigkeiten entfernt: `xclip`, `xsel`, `xdotool`
+  - `install.sh` und `offline/install.sh` installieren jetzt `wl-clipboard` statt X11-Tools
+
 ## [1.3.0] - 2026-05-16
 
 ### Added
