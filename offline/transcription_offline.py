@@ -142,10 +142,14 @@ def select_output_device(interactive=False):
         output_device_index = None
         return None
 
+    default_list_idx = next((i for i, d in enumerate(devices_list) if d == sd.default.device[1]), 0)
     while True:
         try:
-            choice = input(f"Select OUTPUT device for beeps [0-{len(devices_list)-1}]: ").strip()
-            choice_idx = int(choice)
+            choice = input(f"Select OUTPUT device for beeps [0-{len(devices_list)-1}], Enter=Default: ").strip()
+            if choice == "":
+                choice_idx = default_list_idx
+            else:
+                choice_idx = int(choice)
             if choice_idx < 0 or choice_idx >= len(devices_list):
                 print("Invalid selection!")
                 continue
@@ -155,7 +159,7 @@ def select_output_device(interactive=False):
             logger.info(f"Selected output device {output_device_index}: {selected_name}")
             return output_device_index
         except ValueError:
-            print("Please enter a number!")
+            print("Invalid selection!")
 
 # Select single device for both input and output
 def select_auto_device():
@@ -179,10 +183,14 @@ def select_auto_device():
     if len(devices_list) == 0:
         raise RuntimeError("No devices with both input and output found!")
 
+    default_list_idx = next((i for i, d in enumerate(devices_list) if d == sd.default.device[0]), 0)
     while True:
         try:
-            choice = input(f"Select device [0-{len(devices_list)-1}]: ").strip()
-            choice_idx = int(choice)
+            choice = input(f"Select device [0-{len(devices_list)-1}], Enter=Default: ").strip()
+            if choice == "":
+                choice_idx = default_list_idx
+            else:
+                choice_idx = int(choice)
             if choice_idx < 0 or choice_idx >= len(devices_list):
                 print("Invalid selection!")
                 continue
@@ -193,7 +201,7 @@ def select_auto_device():
             logger.info(f"Selected device {device_index} for both input and output: {selected_name}")
             return device_index
         except ValueError:
-            print("Please enter a number!")
+            print("Invalid selection!")
 
 # Audio device selection
 def select_audio_device(interactive=False):
@@ -242,10 +250,14 @@ def select_audio_device(interactive=False):
         logger.info(f"Auto-selected device: {all_devices[device_index]['name']}")
         return device_index
 
+    default_list_idx = next((i for i, d in enumerate(devices_list) if d == sd.default.device[0]), 0)
     while True:
         try:
-            choice = input(f"Select device [0-{len(devices_list)-1}]: ").strip()
-            choice_idx = int(choice)
+            choice = input(f"Select device [0-{len(devices_list)-1}], Enter=Default: ").strip()
+            if choice == "":
+                choice_idx = default_list_idx
+            else:
+                choice_idx = int(choice)
             if choice_idx < 0 or choice_idx >= len(devices_list):
                 print("Invalid selection!")
                 continue
@@ -255,7 +267,7 @@ def select_audio_device(interactive=False):
             logger.info(f"Selected device {device_index}: {selected_name}")
             return device_index
         except ValueError:
-            print("Please enter a number!")
+            print("Invalid selection!")
 
 # Keyboard device detection
 def find_keyboard_devices():
