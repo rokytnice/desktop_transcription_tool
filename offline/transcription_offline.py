@@ -496,15 +496,24 @@ def transcribe_with_whisper(audio_file_path):
         raise
 
 def type_text_in_active_window(text):
-    """Copy text to clipboard using xclip"""
+    """Copy text to clipboard using wl-copy (Wayland), xclip or xsel (X11)"""
     print(f"\n📋 Copying {len(text)} characters to clipboard...")
     logger.info(f"Copying to clipboard: {text}")
 
     try:
-        # Try xclip first
+        # Try wl-copy first (Wayland)
+        result = subprocess.run(["which", "wl-copy"], capture_output=True)
+        if result.returncode == 0:
+            process = subprocess.Popen(["wl-copy"], stdin=subprocess.PIPE)
+            process.communicate(text.encode('utf-8'))
+            print(f"✓ Text copied to clipboard (wl-copy)")
+            print(f"\n🖱️  Now use Ctrl+V to paste!\n")
+            logger.info("Text copied to clipboard using wl-copy")
+            return
+
+        # Fallback: xclip (X11)
         result = subprocess.run(["which", "xclip"], capture_output=True)
         if result.returncode == 0:
-            # Use xclip
             process = subprocess.Popen(["xclip", "-selection", "clipboard"], stdin=subprocess.PIPE)
             process.communicate(text.encode('utf-8'))
             print(f"✓ Text copied to clipboard (xclip)")
@@ -512,7 +521,7 @@ def type_text_in_active_window(text):
             logger.info("Text copied to clipboard using xclip")
             return
 
-        # Fallback to xsel
+        # Fallback: xsel (X11)
         result = subprocess.run(["which", "xsel"], capture_output=True)
         if result.returncode == 0:
             process = subprocess.Popen(["xsel", "-bi"], stdin=subprocess.PIPE)
@@ -523,7 +532,9 @@ def type_text_in_active_window(text):
             return
 
         # No clipboard tool found
-        print("❌ ERROR: xclip or xsel not found!")
+        print("❌ ERROR: No clipboard tool found (wl-copy, xclip or xsel)!")
+        print(f"   Install: sudo apt install wl-clipboard   # Wayland")
+        print(f"         or sudo apt install xclip          # X11")
         print(f"   Text: {text}")
         logger.error("No clipboard tool available")
 
