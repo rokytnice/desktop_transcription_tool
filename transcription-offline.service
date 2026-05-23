@@ -5,13 +5,11 @@ After=pipewire.service pipewire-pulse.service
 
 [Service]
 Type=simple
-Environment="AUDIO_DEVICE=7"
-Environment="AUDIO_OUTPUT_DEVICE=7"
 Environment="WHISPER_MODEL=small"
 Environment="WAYLAND_DISPLAY=wayland-0"
 Environment="XDG_RUNTIME_DIR=/run/user/1000"
 WorkingDirectory=/home/aroc/projects/desktop_transcription_tool/offline
-ExecStart=/home/aroc/projects/desktop_transcription_tool/offline/.venv/bin/python /home/aroc/projects/desktop_transcription_tool/offline/transcription_offline.py
+ExecStart=/home/aroc/projects/desktop_transcription_tool/offline/.venv/bin/python /home/aroc/projects/desktop_transcription_tool/offline/transcription_offline.py -a
 Restart=on-abort
 RestartSec=30
 StandardOutput=journal

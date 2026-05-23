@@ -166,24 +166,37 @@ def select_auto_device():
     """Select ONE device for both input and output"""
     global device_index, output_device_index
 
-    print("\n=== SELECT DEVICE FOR INPUT + OUTPUT ===\n")
-
     devices_list = []
     all_devices = sd.query_devices()
 
-    # Show devices that have both input AND output
     for idx, device in enumerate(all_devices):
         if device['max_input_channels'] > 0 and device['max_output_channels'] > 0:
             devices_list.append(idx)
-            is_default = " ← DEFAULT" if idx == sd.default.device[0] else ""
-            print(f"[{len(devices_list)-1}] Device #{idx}: {device['name']}{is_default}")
-            print(f"         Input: {device['max_input_channels']}ch, Output: {device['max_output_channels']}ch, Rate: {device['default_samplerate']} Hz")
 
-    print()
     if len(devices_list) == 0:
         raise RuntimeError("No devices with both input and output found!")
 
     default_list_idx = next((i for i, d in enumerate(devices_list) if d == sd.default.device[0]), 0)
+
+    # Non-interactive mode (e.g. systemd service): use default automatically
+    import sys
+    if not sys.stdin.isatty():
+        choice_idx = default_list_idx
+        device_index = devices_list[choice_idx]
+        output_device_index = devices_list[choice_idx]
+        selected_name = all_devices[device_index]['name']
+        print(f"✓ Auto-selected default device: {selected_name} (Input + Output)\n")
+        logger.info(f"Auto-selected device {device_index} for both input and output: {selected_name}")
+        return device_index
+
+    print("\n=== SELECT DEVICE FOR INPUT + OUTPUT ===\n")
+    for i, idx in enumerate(devices_list):
+        device = all_devices[idx]
+        is_default = " ← DEFAULT" if idx == sd.default.device[0] else ""
+        print(f"[{i}] Device #{idx}: {device['name']}{is_default}")
+        print(f"         Input: {device['max_input_channels']}ch, Output: {device['max_output_channels']}ch, Rate: {device['default_samplerate']} Hz")
+    print()
+
     while True:
         try:
             choice = input(f"Select device [0-{len(devices_list)-1}], Enter=Default: ").strip()
