@@ -1,4 +1,29 @@
 #!/bin/bash
+#
+# enable-service.sh — systemd User-Service installieren und aktivieren
+#
+# VERWENDUNG
+#   ./enable-service.sh [OPTIONEN]
+#
+# OPTIONEN
+#   -h, --help   Diese Hilfe anzeigen
+#
+# BESCHREIBUNG
+#   Kopiert transcription-offline.service nach ~/.config/systemd/user/,
+#   aktiviert den Service (Autostart bei Login) und startet ihn sofort.
+#   Nach der Einrichtung läuft der Service automatisch bei jedem Login.
+#
+# NACH DER INSTALLATION
+#   transcription-restart   Service neu starten
+#   transcription-start     Service starten
+#   transcription-stop      Service stoppen
+#   transcription-status    Status anzeigen
+
+if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    sed -n '/^#$/,/^[^#]/p' "$0" | grep '^#' | sed 's/^# \?//'
+    exit 0
+fi
+
 set -e
 
 SERVICE="transcription-offline.service"
