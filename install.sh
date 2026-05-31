@@ -67,16 +67,68 @@ fi
 echo -e "${GREEN}✓ All packages installed${NC}\n"
 
 # 4. Make scripts executable
-echo -e "${BLUE}[4/5]${NC} Making scripts executable..."
+echo -e "${BLUE}[4/6]${NC} Making scripts executable..."
 chmod +x offline/transcription_offline.py
 chmod +x offline/install.sh
 chmod +x offline/run.sh
 chmod +x online/transcription_online.py
 chmod +x install.sh
+chmod +x enable-service.sh
+chmod +x restart-service.sh
 echo -e "${GREEN}✓ Scripts are executable${NC}\n"
 
-# 5. Create convenience scripts
-echo -e "${BLUE}[5/5]${NC} Creating convenience commands..."
+# 5. Install service + global commands
+echo -e "${BLUE}[5/6]${NC} Installing systemd service and global commands..."
+
+mkdir -p ~/.config/systemd/user
+cp "$SCRIPT_DIR/transcription-offline.service" ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable transcription-offline.service
+
+mkdir -p ~/.local/bin
+
+cat > ~/.local/bin/transcription-restart << SCRIPT
+#!/bin/bash
+systemctl --user restart transcription-offline.service
+systemctl --user status transcription-offline.service --no-pager
+SCRIPT
+
+cat > ~/.local/bin/transcription-stop << SCRIPT
+#!/bin/bash
+systemctl --user stop transcription-offline.service
+echo "Service stopped."
+SCRIPT
+
+cat > ~/.local/bin/transcription-start << SCRIPT
+#!/bin/bash
+systemctl --user start transcription-offline.service
+systemctl --user status transcription-offline.service --no-pager
+SCRIPT
+
+cat > ~/.local/bin/transcription-status << SCRIPT
+#!/bin/bash
+systemctl --user status transcription-offline.service --no-pager
+SCRIPT
+
+chmod +x ~/.local/bin/transcription-restart
+chmod +x ~/.local/bin/transcription-stop
+chmod +x ~/.local/bin/transcription-start
+chmod +x ~/.local/bin/transcription-status
+
+# Ensure ~/.local/bin is in PATH
+if ! grep -q 'local/bin' ~/.bashrc; then
+    echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+fi
+
+echo -e "${GREEN}✓ Service enabled, global commands installed${NC}"
+echo -e "   ${YELLOW}transcription-restart${NC}  restart-service"
+echo -e "   ${YELLOW}transcription-start${NC}    start service"
+echo -e "   ${YELLOW}transcription-stop${NC}     stop service"
+echo -e "   ${YELLOW}transcription-status${NC}   show status"
+echo -e "   (Run ${YELLOW}source ~/.bashrc${NC} if commands not found yet)\n"
+
+# 6. Create convenience scripts
+echo -e "${BLUE}[6/6]${NC} Creating convenience commands..."
 
 # Create run_offline.sh in root
 cat > run_offline.sh << 'SCRIPT'
@@ -102,6 +154,12 @@ echo -e "${GREEN}✓ Convenience scripts created${NC}\n"
 echo "╔════════════════════════════════════════════════════╗"
 echo -e "║  ${GREEN}✓ Installation Complete!${NC}                      ║"
 echo "╚════════════════════════════════════════════════════╝"
+echo ""
+echo -e "${BLUE}🔧 Service Commands (überall ausführbar):${NC}"
+echo -e "   ${YELLOW}transcription-restart${NC}  Service neu starten"
+echo -e "   ${YELLOW}transcription-start${NC}    Service starten"
+echo -e "   ${YELLOW}transcription-stop${NC}     Service stoppen"
+echo -e "   ${YELLOW}transcription-status${NC}   Status anzeigen"
 echo ""
 echo -e "${BLUE}📋 Available Tools:${NC}"
 echo ""
