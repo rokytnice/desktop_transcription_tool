@@ -1,146 +1,90 @@
 # Desktop Transcription Tool 🎤
 
-Mehrere Spracherkennungs-Tools für verschiedene Anwendungsfälle.
+Offline-Spracherkennung mit OpenAI Whisper — aufnehmen, transkribieren, in Zwischenablage kopieren.
 
 ## 📁 Projektstruktur
 
 ```
 desktop_transcription_tool/
-├── offline/                    🎤 Offline Transkription (Whisper)
+├── offline/                      Offline Transkription (Whisper)
 │   ├── transcription_offline.py
 │   ├── install.sh
 │   ├── run.sh
 │   ├── requirements.txt
 │   └── README.md
 │
-├── online/                     🌐 Online Transkription (Google API)
-│   ├── transcription_online.py
-│   ├── requirements.txt
-│   └── README.md
+├── text_improvement/             Text-Verbesserung mit LLM
+│   └── transcription_listener_offline_text_improvement.py
 │
-├── text_improvement/           ✨ Text-Verbesserung mit LLM
-│   ├── transcription_listener_offline_text_improvement.py
-│   └── transcription_listener_offline_text_improvement.md
-│
-├── big_audio_file_transcription/ 📁 Große Audio-Dateien
+├── big_audio_file_transcription/ Große Audio-Dateien transkribieren
 │   ├── transcribe_audio.py
-│   ├── requirements.txt
-│   └── chunks/
+│   └── requirements.txt
 │
-├── docs/                       📚 Dokumentation
-│   ├── README.md
-│   └── functional_requirements.md
-│
-└── README.md                   (dieses File)
+├── transcription-offline.service systemd User-Service
+├── install.sh                    Installations-Script
+├── enable-service.sh             Service einmalig aktivieren
+├── restart-service.sh            Service neu starten
+└── run_offline.sh                Manuell starten
 ```
 
-## 🚀 Schnelstart
-
-### Installation (einmalig)
-```bash
-./install.sh
-```
-Das installiert alles und erstellt Convenience-Scripts!
-
-### Offline (Whisper - lokal, kein API Key nötig) ⭐
-```bash
-./run_offline.sh                # Standard: Default-Devices, schnell
-./run_offline.sh -H             # Interaktiv: Geräte-Auswahl
-```
-
-### Online (Google Speech API - mit API Key)
-```bash
-export API_KEY="your_google_api_key"
-./run_online.sh
-```
-
-Oder direkt in den Ordner:
-```bash
-cd offline && ./run.sh
-cd online && python transcription_online.py
-```
-
-## 🛠️ Features nach Tool
-
-| Tool | Features | Anforderungen |
-|------|----------|---------------|
-| **Offline** | 🎙️ Echtzeit, 🤖 Whisper, 🇩🇪 Deutsch, 📋 Clipboard | Python 3.12, wl-clipboard |
-| **Online** | ☁️ Google API, 🎙️ Mikrofon, 📝 Auto-Type | API Key, Internet |
-| **Text Improvement** | ✨ LLM-basierte Verbesserung | Google Gemini API |
-
-## 📋 Bedienung (Offline)
-
-1. **Alt Tap Tap** → Recording startet 🔴
-2. **Sprechen Sie 2-3 Sekunden** 🗣️
-3. **Alt Tap Tap** → Recording stoppt & transkribiert ⏹️
-4. **Ctrl+V** → Text einfügen 📝
-
-## 📖 Dokumentation
-
-- [Offline Transkription](offline/README.md)
-- [Online Transkription](online/README.md)
-- [Anforderungen](docs/functional_requirements.md)
-
-## 🔧 System-Anforderungen
-
-- Python 3.12+
-- Linux (getestet auf Ubuntu 24.04)
-- Audio-Geräte (Mikrofon)
-- wl-clipboard (für Clipboard-Funktion, Wayland)
-- Gruppe `input` für Tastaturzugriff ohne sudo
-
-## ⚙️ Als User-Service einrichten (autostart)
-
-Einmalig ausführen:
+## 🚀 Installation (einmalig)
 
 ```bash
 # 1. User zur input-Gruppe hinzufügen (Tastaturzugriff ohne sudo)
 sudo usermod -aG input $USER
+# Ausloggen und wieder einloggen
 
-# 2. Ausloggen und wieder einloggen (Gruppe wird aktiv)
-
-# 3. Service-Datei installieren
-mkdir -p ~/.config/systemd/user/
-cp transcription-offline.service ~/.config/systemd/user/
-
-# 4. Service aktivieren
-systemctl --user daemon-reload
-systemctl --user enable --now transcription-offline.service
+# 2. Alles installieren (Pakete, venv, Service, globale Kommandos)
+./install.sh
 ```
 
-Danach startet der Service automatisch bei jedem Login.
+## ▶️ Starten
 
-**Wichtig:** Die Service-Datei enthält `WAYLAND_DISPLAY=wayland-0` und `XDG_RUNTIME_DIR`, damit `wl-copy` auf die Zwischenablage zugreifen kann.
+```bash
+# Als Service (autostart bei Login) — empfohlen
+./enable-service.sh
 
-**Verwalten:**
+# Manuell
+./run_offline.sh          # Interaktive Geräteauswahl
+./run_offline.sh -a       # Ein Gerät für Input + Output (z.B. Jabra Headset)
+./run_offline.sh -d       # Schnellstart mit Default-Geräten
+```
+
+## 🎤 Bedienung
+
+1. **Alt Tap Tap** → Aufnahme startet
+2. **Sprechen**
+3. **Alt Tap Tap** → Aufnahme stoppt, Whisper transkribiert
+4. **Ctrl+V** → Text einfügen
+
+## 🔧 Service-Verwaltung
+
+Nach `./install.sh` sind diese Kommandos überall verfügbar:
+
+```bash
+transcription-restart    # Service neu starten
+transcription-start      # Service starten
+transcription-stop       # Service stoppen
+transcription-status     # Status anzeigen
+```
+
+Oder direkt mit systemctl:
 ```bash
 systemctl --user status transcription-offline.service
 systemctl --user restart transcription-offline.service
-systemctl --user stop transcription-offline.service
 journalctl --user -u transcription-offline.service -f   # Live-Log
 ```
 
-**Warum User-Service statt System-Service?**
+## 🖥️ System-Anforderungen
 
-| | System-Service | User-Service |
-|---|---|---|
-| Läuft als | root | $USER |
-| Startet | beim Booten | beim Login |
-| Audio/PipeWire | braucht Workarounds | funktioniert direkt |
-| Verwalten | `sudo systemctl` | `systemctl --user` |
+- Linux mit Wayland (getestet auf Ubuntu 24.04)
+- Python 3.12+
+- `wl-clipboard` (Wayland Clipboard)
+- Mikrofon + Lautsprecher
+- Gruppe `input` für Tastaturzugriff ohne sudo
 
 ## 📝 Logs
-
-Logs werden gespeichert in: `~/.transcription/transcription_listener.log`
 
 ```bash
 tail -f ~/.transcription/transcription_listener.log
 ```
-
-## 🤝 Beitrag
-
-Fragen oder Probleme? GitHub Issues willkommen!
-
----
-
-*Made with ❤️ for transcription automation*
