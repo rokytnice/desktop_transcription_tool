@@ -21,7 +21,7 @@
 #   AUDIO_DEVICE          Input-Gerät (Index, überschreibt Auswahl)
 #   AUDIO_OUTPUT_DEVICE   Output-Gerät (Index, für Beeps)
 #   WHISPER_MODEL         tiny | base | small | medium | large  (Standard: small)
-#   STREAM_MIN_CHUNK      Update-Takt in s (neue Audiomenge pro Lauf)  (Standard: 1.0)
+#   STREAM_MIN_CHUNK      Update-Takt in s (~2s ≈ 3-5 Wörter pro Schub)  (Standard: 2.0)
 #   STREAM_MAX_BUFFER     Puffer-Obergrenze in s vor Beschnitt         (Standard: 18.0)
 #   STREAM_BEAM           Beam-Size (1 = geringste Latenz)             (Standard: 1)
 #
@@ -30,9 +30,9 @@
 #   Ctrl+C    Programm beenden
 #
 # TIPP
-#   Auf CPU für flüssiges wortweises Streaming ein kleines Modell verwenden:
-#     WHISPER_MODEL=tiny ./run_faster_streaming.sh
-#     WHISPER_MODEL=base ./run_faster_streaming.sh
+#   Standard-Takt 2s (~3-5 Wörter pro Schub) — 'small' hält auch auf CPU Schritt.
+#   Für möglichst wortweise Ausgabe Takt senken + kleineres Modell:
+#     STREAM_MIN_CHUNK=1.0 WHISPER_MODEL=base ./run_faster_streaming.sh
 #
 # BEISPIELE
 #   ./run_faster_streaming.sh                      Interaktive Geräteauswahl
