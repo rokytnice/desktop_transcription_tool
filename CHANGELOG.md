@@ -2,6 +2,25 @@
 
 Alle wichtigen Änderungen werden in dieser Datei dokumentiert.
 
+## [1.6.0] - 2026-06-23
+
+### Added
+- **Wortweises Echtzeit-Streaming** (`offline/transcription_faster_streaming.py`,
+  `run_faster_streaming.sh`)
+  - Nutzt **faster-whisper** (CTranslate2) statt openai-whisper — 3-4x schneller,
+    weniger RAM, `int8` auf CPU / `float16` auf GPU
+  - **LocalAgreement-2** (Macháček et al., "whisper_streaming"): ein wachsender
+    Audio-Puffer wird ~jede Sekunde neu transkribiert; nur Wörter, die über ZWEI
+    Läufe stabil bleiben, werden festgeschrieben und sofort getippt
+  - Dadurch erscheint Text WÄHREND des Sprechens — auch mitten im Satz, nicht
+    erst an der Sprechpause wie bei der VAD-Variante (`run_streaming.sh`)
+  - Puffer-Beschnitt am letzten bestätigten Wort hält das Modell schnell
+  - Neue Tuning-Variablen: `STREAM_MIN_CHUNK` (Update-Takt), `STREAM_MAX_BUFFER`
+    (Puffer-Obergrenze), `STREAM_BEAM` (Beam-Size)
+  - Gleiche Bedienung (Alt+Alt) und gleiche Tipp-Backends (ydotool/wtype/clipboard)
+    wie die übrigen Modi
+- `faster-whisper` zu `offline/requirements.txt` und `install.sh` hinzugefügt
+
 ## [1.5.0] - 2026-06-23
 
 ### Added

@@ -68,6 +68,7 @@ echo -e "${GREEN}✓ All packages installed${NC}\n"
 echo -e "${BLUE}[4/6]${NC} Making scripts executable..."
 chmod +x offline/transcription_offline.py
 chmod +x offline/transcription_streaming.py
+chmod +x offline/transcription_faster_streaming.py
 chmod +x offline/install.sh
 chmod +x offline/run.sh
 chmod +x install.sh
@@ -127,7 +128,7 @@ echo -e "   (Run ${YELLOW}source ~/.bashrc${NC} if commands not found yet)\n"
 
 # 6. Make management scripts executable
 echo -e "${BLUE}[6/6]${NC} Finalizing..."
-chmod +x run_offline.sh run_streaming.sh enable-service.sh restart-transcription-service.sh
+chmod +x run_offline.sh run_streaming.sh run_faster_streaming.sh enable-service.sh restart-transcription-service.sh
 echo -e "${GREEN}✓ Done${NC}\n"
 
 # Summary
@@ -147,10 +148,16 @@ echo -e "   ${YELLOW}./run_offline.sh -a${NC}     Ein Gerät für Input + Output
 echo -e "   ${YELLOW}./run_offline.sh -d${NC}     Schnellstart mit Defaults"
 echo -e "   ${YELLOW}./run_offline.sh --help${NC} Alle Optionen anzeigen"
 echo ""
-echo -e "${BLUE}⚡ Streaming (live tippen am Cursor während des Sprechens):${NC}"
+echo -e "${BLUE}⚡ Streaming an Sprechpausen (VAD, openai-whisper):${NC}"
 echo -e "   ${YELLOW}./run_streaming.sh${NC}        Interaktive Geräteauswahl"
 echo -e "   ${YELLOW}./run_streaming.sh -a${NC}     Ein Gerät für Input + Output"
 echo -e "   ${YELLOW}./run_streaming.sh --help${NC} Alle Optionen anzeigen"
+echo ""
+echo -e "${BLUE}⚡⚡ Wortweises Live-Streaming (faster-whisper + LocalAgreement):${NC}"
+echo -e "   ${YELLOW}./run_faster_streaming.sh${NC}        Interaktive Geräteauswahl"
+echo -e "   ${YELLOW}./run_faster_streaming.sh -a${NC}     Ein Gerät für Input + Output"
+echo -e "   ${YELLOW}WHISPER_MODEL=tiny ./run_faster_streaming.sh${NC}  Geringste Latenz"
+echo -e "   ${YELLOW}./run_faster_streaming.sh --help${NC} Alle Optionen anzeigen"
 echo ""
 echo -e "${BLUE}🎤 Bedienung:${NC}"
 echo "   Alt Tap Tap  → Aufnahme starten"

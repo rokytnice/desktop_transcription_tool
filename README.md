@@ -1,10 +1,12 @@
 # Desktop Transcription Tool 🎤
 
-Offline-Spracherkennung mit OpenAI Whisper. Zwei Modi:
+Offline-Spracherkennung mit Whisper. Drei Modi:
 
 - **Klassisch** (`run_offline.sh`) — aufnehmen → stoppen → Text in Zwischenablage (Ctrl+V).
-- **Streaming** (`run_streaming.sh`) — transkribiert **live während des Sprechens** und tippt
-  den Text direkt an der Cursor-Position. Kein Warten, kein Ctrl+V.
+- **Streaming an Sprechpausen** (`run_streaming.sh`) — VAD-basiert: tippt die erkannte
+  Phrase **an jeder Sprechpause** live an der Cursor-Position. Kein Warten, kein Ctrl+V.
+- **Wortweises Live-Streaming** (`run_faster_streaming.sh`) — faster-whisper +
+  LocalAgreement: tippt Text **wortweise WÄHREND des Sprechens**, auch mitten im Satz.
 
 ## 📁 Projektstruktur
 
@@ -12,7 +14,8 @@ Offline-Spracherkennung mit OpenAI Whisper. Zwei Modi:
 desktop_transcription_tool/
 ├── offline/                       Offline Transkription (Whisper)
 │   ├── transcription_offline.py   Klassisch: aufnehmen → stoppen → einfügen
-│   ├── transcription_streaming.py Streaming: live tippen am Cursor
+│   ├── transcription_streaming.py Streaming an Sprechpausen (VAD)
+│   ├── transcription_faster_streaming.py  Wortweises Live-Streaming (faster-whisper)
 │   ├── install.sh                 Offline-spezifische Installation
 │   ├── run.sh                     Direkt starten (ohne Auto-Restart)
 │   ├── requirements.txt
@@ -30,7 +33,8 @@ desktop_transcription_tool/
 ├── enable-service.sh              Service einmalig aktivieren
 ├── restart-transcription-service.sh  Service neu starten
 ├── run_offline.sh                 Klassisch starten (mit Auto-Restart)
-└── run_streaming.sh               Streaming starten (mit Auto-Restart)
+├── run_streaming.sh               Streaming an Sprechpausen (mit Auto-Restart)
+└── run_faster_streaming.sh        Wortweises Live-Streaming (mit Auto-Restart)
 ```
 
 ---
@@ -132,6 +136,62 @@ Das Streaming wählt das Tipp-Backend automatisch:
 
 > **GNOME-Hinweis:** `wtype` funktioniert auf GNOME **nicht** (Mutter unterstützt das
 > virtual-keyboard-Protokoll nicht). Deshalb wird dort `ydotool` verwendet.
+
+---
+
+## ⚡⚡ run_faster_streaming.sh (Wortweises Live-Streaming)
+
+Die schnellste Variante: tippt Text **wortweise WÄHREND des Sprechens** — auch mitten
+im Satz, nicht erst an der Sprechpause. Technik:
+
+- **faster-whisper** (CTranslate2) statt openai-whisper — 3-4× schneller, weniger RAM
+  (`int8` auf CPU, `float16` auf GPU).
+- **LocalAgreement-2** (Macháček et al., *whisper_streaming*): ein wachsender Audio-Puffer
+  wird ~jede Sekunde neu transkribiert; nur Wörter, die über **zwei aufeinanderfolgende
+  Läufe stabil** bleiben, werden festgeschrieben und sofort getippt. Das verhindert
+  flackernde, ständig korrigierte Ausgabe bei niedriger Latenz.
+
+```
+VERWENDUNG
+  ./run_faster_streaming.sh [OPTIONEN]
+
+OPTIONEN
+  (kein Flag)   Interaktive Geräteauswahl beim Start
+  -a, --auto    Ein Gerät für Input UND Output (z.B. Jabra Headset)
+  -d, --default Schnellstart mit System-Default-Geräten, kein Menü
+  -h, --help    Diese Hilfe anzeigen
+
+UMGEBUNGSVARIABLEN
+  AUDIO_DEVICE          Input-Gerät (Index, überschreibt Auswahl)
+  AUDIO_OUTPUT_DEVICE   Output-Gerät (Index, für Beeps)
+  WHISPER_MODEL         tiny|base|small|medium|large  (Standard: small)
+  STREAM_MIN_CHUNK      Update-Takt in s (neue Audiomenge pro Lauf)  (Standard: 1.0)
+  STREAM_MAX_BUFFER     Puffer-Obergrenze in s vor Beschnitt         (Standard: 18.0)
+  STREAM_BEAM           Beam-Size (1 = geringste Latenz)             (Standard: 1)
+
+BEISPIELE
+  ./run_faster_streaming.sh                      Interaktive Geräteauswahl
+  ./run_faster_streaming.sh -a                   Jabra-Modus: ein Gerät für alles
+  WHISPER_MODEL=tiny ./run_faster_streaming.sh   Geringste Latenz (empfohlen auf CPU)
+```
+
+**Bedienung:** Alt+Alt startet/stoppt das Streaming, dann sprechen — der Text erscheint
+wortweise im fokussierten Fenster. Tipp-Backends (ydotool/wtype/Clipboard) wie oben.
+
+> **CPU-Tipp:** Auf reinen CPU-Maschinen ein kleines Modell (`tiny`/`base`) verwenden,
+> damit die wiederholte Transkription mit dem Sprechtempo Schritt hält. Auf GPU ist auch
+> `small`/`medium` flüssig. Der Clipboard-Fallback ist für diesen Modus ungeeignet
+> (jedes Wort würde das vorige überschreiben) — also `ydotool`/`wtype` sicherstellen.
+
+### Welcher Streaming-Modus?
+
+| | `run_streaming.sh` (VAD) | `run_faster_streaming.sh` (LocalAgreement) |
+|---|---|---|
+| Engine | openai-whisper | faster-whisper (3-4× schneller) |
+| Ausgabe erscheint | an der Sprechpause | wortweise beim Sprechen |
+| Latenz | pro Phrase | ~1-2 s pro Wortgruppe |
+| Beste Genauigkeit | etwas höher (ganze Phrase) | leicht geringer (inkrementell) |
+| CPU-Last | niedriger | höher (wiederholtes Decoden) |
 
 ---
 
