@@ -1,9 +1,9 @@
 #!/bin/bash
 #
-# restart-service.sh — Transcription Service neu starten
+# restart-transcription-service.sh — Transcription Service neu starten
 #
 # VERWENDUNG
-#   ./restart-service.sh [OPTIONEN]
+#   ./restart-transcription-service.sh [OPTIONEN]
 #
 # OPTIONEN
 #   -h, --help   Diese Hilfe anzeigen
@@ -19,5 +19,6 @@ if [[ "$1" == "-h" || "$1" == "--help" ]]; then
     exit 0
 fi
 
+systemctl --user restart pipewire wireplumber
 systemctl --user restart transcription-offline.service
 systemctl --user status transcription-offline.service --no-pager

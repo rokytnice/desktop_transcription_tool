@@ -2,6 +2,27 @@
 
 Alle wichtigen Änderungen werden in dieser Datei dokumentiert.
 
+## [1.5.0] - 2026-06-23
+
+### Added
+- **Echtzeit-Streaming-Transkription** (`offline/transcription_streaming.py`, `run_streaming.sh`)
+  - Transkribiert KONTINUIERLICH während des Sprechens statt erst am Ende der Eingabe
+  - VAD-basierte Phrasensegmentierung: schneidet an Sprechpausen, nicht mitten im Wort
+  - Tippt den erkannten Text live an der Cursor-Position (kein Ctrl+V nötig)
+  - Start/Stopp wie gewohnt per Alt+Alt-Doppeltipp
+  - Neue Tuning-Variablen: `STREAM_SILENCE_RMS`, `STREAM_MIN_SILENCE`,
+    `STREAM_MIN_PHRASE`, `STREAM_MAX_PHRASE`
+- **Live-Tippen am Cursor** mit automatischer Backend-Erkennung:
+  - `ydotool` (Kernel-uinput) — funktioniert auf GNOME/Mutter (Wayland)
+  - `wtype` (virtual-keyboard) — für wlroots-Compositors (Sway/Hyprland)
+  - Zwischenablage (`wl-copy`) als Fallback
+  - `ydotoold` wird bei Bedarf automatisch im User-Kontext gestartet
+- `install.sh` installiert jetzt zusätzlich `ydotool` und `wtype`
+
+### Fixed
+- `install.sh` referenzierte gelöschte `online/`-Dateien (Installation brach mit
+  `set -e` ab) — entfernt
+
 ## [1.4.0] - 2026-05-22
 
 ### Added

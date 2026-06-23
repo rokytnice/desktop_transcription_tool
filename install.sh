@@ -28,6 +28,8 @@ sudo apt-get install -y -qq \
     python3.12-venv \
     python3.12-dev \
     wl-clipboard \
+    ydotool \
+    wtype \
     alsa-utils \
     pulseaudio-utils \
     portaudio19-dev \
@@ -54,10 +56,6 @@ pip install --break-system-packages --upgrade pip setuptools wheel > /dev/null 2
 echo "   → offline/ (Whisper)"
 pip install --break-system-packages -q -r offline/requirements.txt
 
-# Install online requirements
-echo "   → online/ (Google API)"
-pip install --break-system-packages -q -r online/requirements.txt
-
 # Install big_audio_file requirements
 if [ -f "big_audio_file_transcription/requirements.txt" ]; then
     echo "   → big_audio_file_transcription/ (Große Dateien)"
@@ -69,12 +67,12 @@ echo -e "${GREEN}✓ All packages installed${NC}\n"
 # 4. Make scripts executable
 echo -e "${BLUE}[4/6]${NC} Making scripts executable..."
 chmod +x offline/transcription_offline.py
+chmod +x offline/transcription_streaming.py
 chmod +x offline/install.sh
 chmod +x offline/run.sh
-chmod +x online/transcription_online.py
 chmod +x install.sh
 chmod +x enable-service.sh
-chmod +x restart-service.sh
+chmod +x restart-transcription-service.sh
 echo -e "${GREEN}✓ Scripts are executable${NC}\n"
 
 # 5. Install service + global commands
@@ -129,7 +127,7 @@ echo -e "   (Run ${YELLOW}source ~/.bashrc${NC} if commands not found yet)\n"
 
 # 6. Make management scripts executable
 echo -e "${BLUE}[6/6]${NC} Finalizing..."
-chmod +x run_offline.sh enable-service.sh restart-service.sh
+chmod +x run_offline.sh run_streaming.sh enable-service.sh restart-transcription-service.sh
 echo -e "${GREEN}✓ Done${NC}\n"
 
 # Summary
@@ -143,11 +141,16 @@ echo -e "   ${YELLOW}transcription-start${NC}    Service starten"
 echo -e "   ${YELLOW}transcription-stop${NC}     Service stoppen"
 echo -e "   ${YELLOW}transcription-status${NC}   Status anzeigen"
 echo ""
-echo -e "${BLUE}🚀 Starten:${NC}"
+echo -e "${BLUE}🚀 Starten (klassisch: aufnehmen → stoppen → einfügen):${NC}"
 echo -e "   ${YELLOW}./run_offline.sh${NC}        Interaktive Geräteauswahl"
 echo -e "   ${YELLOW}./run_offline.sh -a${NC}     Ein Gerät für Input + Output"
 echo -e "   ${YELLOW}./run_offline.sh -d${NC}     Schnellstart mit Defaults"
 echo -e "   ${YELLOW}./run_offline.sh --help${NC} Alle Optionen anzeigen"
+echo ""
+echo -e "${BLUE}⚡ Streaming (live tippen am Cursor während des Sprechens):${NC}"
+echo -e "   ${YELLOW}./run_streaming.sh${NC}        Interaktive Geräteauswahl"
+echo -e "   ${YELLOW}./run_streaming.sh -a${NC}     Ein Gerät für Input + Output"
+echo -e "   ${YELLOW}./run_streaming.sh --help${NC} Alle Optionen anzeigen"
 echo ""
 echo -e "${BLUE}🎤 Bedienung:${NC}"
 echo "   Alt Tap Tap  → Aufnahme starten"
