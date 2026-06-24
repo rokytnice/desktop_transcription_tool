@@ -2,6 +2,26 @@
 
 Alle wichtigen Änderungen werden in dieser Datei dokumentiert.
 
+## [1.6.1] - 2026-06-24
+
+### Fixed
+- **Layout-korrektes Tippen auf deutscher Tastatur** (`transcription_streaming.py`,
+  `transcription_faster_streaming.py`)
+  - ydotool sendet rohe US-Keycodes ("we're using raw keycodes now"); auf einem
+    deutschen (QWERTZ) Compositor wurden dadurch **Z↔Y vertauscht** und Umlaute/
+    Sonderzeichen verstümmelt — das Log war korrekt, nur die getippte Ausgabe nicht
+  - Fix: Bei aktivem de-Layout werden jetzt die **richtigen Keycodes für die
+    deutsche Belegung** über `ydotool key` gesendet (vollständige T1-Keymap inkl.
+    äöüß, @, €). Typografische Zeichen („ " – …) werden auf tippbare gefaltet
+  - Layout wird automatisch erkannt (GNOME input-sources → localectl); per
+    `STREAM_KBLAYOUT=us|de` überschreibbar
+- **Transkription läuft beim Stoppen zu Ende** (`transcription_faster_streaming.py`)
+  - Beim Stoppen wurde der letzte ~Sprech-Chunk verschluckt, weil LocalAgreement
+    nur über zwei Läufe stabile Wörter festschreibt
+  - `OnlineASRProcessor.finish()` macht jetzt einen **finalen Transkriptionslauf**
+    über das Rest-Audio und gibt ALLE noch nicht getippten Wörter aus — nichts
+    kurz vor dem Stopp Gesprochenes geht mehr verloren
+
 ## [1.6.0] - 2026-06-23
 
 ### Added

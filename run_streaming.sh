@@ -24,6 +24,7 @@
 #   STREAM_MIN_SILENCE    Pausenlänge in s bis Phrase getippt wird (Standard: 0.7)
 #   STREAM_MIN_PHRASE     Minimale Phrasenlänge in s              (Standard: 0.4)
 #   STREAM_MAX_PHRASE     Max. Phrasenlänge in s ohne Pause       (Standard: 15.0)
+#   STREAM_KBLAYOUT       Tastaturlayout für ydotool (de|us, sonst Auto-Erkennung)
 #
 # BEDIENUNG
 #   Alt+Alt   Streaming starten / stoppen
