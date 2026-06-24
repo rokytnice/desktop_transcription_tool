@@ -2,6 +2,23 @@
 
 Alle wichtigen Änderungen werden in dieser Datei dokumentiert.
 
+## [1.7.1] - 2026-06-24
+
+### Fixed
+- **Doppelt/vielfach getippter Text bei zwei laufenden Instanzen**
+  (`transcription_offline.py`, `transcription_streaming.py`,
+  `transcription_faster_streaming.py`)
+  - Symptom: Im Logfile war die Transkription sauber, am Cursor erschien der Text
+    aber mehrfach. Ursache: Es liefen **zwei Instanzen gleichzeitig** (systemd-
+    Service **und** ein manuell gestartetes `./run_*.sh`). Beide überwachten die
+    Tastatur, erkannten denselben Alt+Alt-Doppeltipp, transkribierten dieselbe
+    Audio und tippten beide am Cursor — daher der vervielfachte Text und doppelte
+    Logzeilen (`DOUBLE-TAP DETECTED`, `Streaming started/stopped`).
+  - Fix: **Single-Instance-Sperre** (`offline/_singleinstance.py`, `flock` auf
+    `$XDG_RUNTIME_DIR/desktop_transcription.<uid>.lock`). Systemweit darf nur EINE
+    Transcription-Instanz laufen; ein zweiter Start bricht sofort mit klarer
+    Meldung sauber ab (Exit 0) und nennt die PID des laufenden Halters.
+
 ## [1.7.0] - 2026-06-24
 
 ### Added

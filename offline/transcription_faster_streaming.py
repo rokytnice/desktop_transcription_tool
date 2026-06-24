@@ -912,6 +912,10 @@ Beispiele:
                         help='Ein Gerät für Input UND Output auswählen')
     args = parser.parse_args()
 
+    # Nur EINE Transcription-Instanz darf laufen (sonst doppeltes Tippen).
+    import _singleinstance
+    _singleinstance.acquire_or_exit()
+
     interactive = not args.default
 
     signal.signal(signal.SIGINT, _signal_handler)

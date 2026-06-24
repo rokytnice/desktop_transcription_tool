@@ -601,6 +601,10 @@ Beispiele:
                         help='Ein Gerät für Input UND Output auswählen (z.B. Jabra Headset)')
     args = parser.parse_args()
 
+    # Nur EINE Transcription-Instanz darf laufen (sonst doppeltes Tippen).
+    import _singleinstance
+    _singleinstance.acquire_or_exit()
+
     # Interactive mode is TRUE by default, only FALSE if -d is passed
     interactive = not args.default
     auto_device = args.auto
