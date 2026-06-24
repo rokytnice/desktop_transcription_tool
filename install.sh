@@ -72,63 +72,28 @@ chmod +x offline/transcription_faster_streaming.py
 chmod +x offline/install.sh
 chmod +x offline/run.sh
 chmod +x install.sh
+chmod +x setup-service.sh
 chmod +x enable-service.sh
 chmod +x restart-transcription-service.sh
 echo -e "${GREEN}✓ Scripts are executable${NC}\n"
 
-# 5. Install service + global commands
+# 5. Install service + global commands (delegiert an setup-service.sh)
 echo -e "${BLUE}[5/6]${NC} Installing systemd service and global commands..."
 
-mkdir -p ~/.config/systemd/user
-cp "$SCRIPT_DIR/transcription-offline.service" ~/.config/systemd/user/
-systemctl --user daemon-reload
-systemctl --user enable transcription-offline.service
+# Modus überschreibbar: TRANSCRIPTION_MODE=offline ./install.sh
+"$SCRIPT_DIR/setup-service.sh" "${TRANSCRIPTION_MODE:-faster-streaming}" --no-start
 
-mkdir -p ~/.local/bin
-
-cat > ~/.local/bin/transcription-restart << SCRIPT
-#!/bin/bash
-systemctl --user restart transcription-offline.service
-systemctl --user status transcription-offline.service --no-pager
-SCRIPT
-
-cat > ~/.local/bin/transcription-stop << SCRIPT
-#!/bin/bash
-systemctl --user stop transcription-offline.service
-echo "Service stopped."
-SCRIPT
-
-cat > ~/.local/bin/transcription-start << SCRIPT
-#!/bin/bash
-systemctl --user start transcription-offline.service
-systemctl --user status transcription-offline.service --no-pager
-SCRIPT
-
-cat > ~/.local/bin/transcription-status << SCRIPT
-#!/bin/bash
-systemctl --user status transcription-offline.service --no-pager
-SCRIPT
-
-chmod +x ~/.local/bin/transcription-restart
-chmod +x ~/.local/bin/transcription-stop
-chmod +x ~/.local/bin/transcription-start
-chmod +x ~/.local/bin/transcription-status
-
-# Ensure ~/.local/bin is in PATH
-if ! grep -q 'local/bin' ~/.bashrc; then
-    echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
-fi
-
-echo -e "${GREEN}✓ Service enabled, global commands installed${NC}"
+echo -e "${GREEN}✓ Service enabled for autostart, global commands installed${NC}"
 echo -e "   ${YELLOW}transcription-restart${NC}  restart-service"
 echo -e "   ${YELLOW}transcription-start${NC}    start service"
 echo -e "   ${YELLOW}transcription-stop${NC}     stop service"
 echo -e "   ${YELLOW}transcription-status${NC}   show status"
+echo -e "   ${YELLOW}transcription-log${NC}      live log"
 echo -e "   (Run ${YELLOW}source ~/.bashrc${NC} if commands not found yet)\n"
 
 # 6. Make management scripts executable
 echo -e "${BLUE}[6/6]${NC} Finalizing..."
-chmod +x run_offline.sh run_streaming.sh run_faster_streaming.sh enable-service.sh restart-transcription-service.sh
+chmod +x run_offline.sh run_streaming.sh run_faster_streaming.sh setup-service.sh enable-service.sh restart-transcription-service.sh
 echo -e "${GREEN}✓ Done${NC}\n"
 
 # Summary

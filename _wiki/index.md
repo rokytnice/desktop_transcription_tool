@@ -3,6 +3,7 @@
 _Zuletzt aktualisiert: 2026-06-24_
 
 ## Inhalt
+- [service.md](service.md) — Service-Setup & Autostart bei Rechnerstart
 - [troubleshooting.md](troubleshooting.md) — bekannte Probleme, Diagnose, Fix
 
 ## Kurzüberblick

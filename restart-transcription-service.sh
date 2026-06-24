@@ -9,7 +9,7 @@
 #   -h, --help   Diese Hilfe anzeigen
 #
 # BESCHREIBUNG
-#   Startet den transcription-offline.service neu und zeigt danach den Status.
+#   Startet den transcription.service neu und zeigt danach den Status.
 #   Kann auch als globales Kommando verwendet werden (nach ./install.sh):
 #
 #   transcription-restart
@@ -20,5 +20,5 @@ if [[ "$1" == "-h" || "$1" == "--help" ]]; then
 fi
 
 systemctl --user restart pipewire wireplumber
-systemctl --user restart transcription-offline.service
-systemctl --user status transcription-offline.service --no-pager
+systemctl --user restart transcription.service
+systemctl --user status transcription.service --no-pager

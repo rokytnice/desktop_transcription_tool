@@ -28,9 +28,9 @@ desktop_transcription_tool/
 │   ├── transcribe_audio.py
 │   └── requirements.txt
 │
-├── transcription-offline.service  systemd User-Service Definition
 ├── install.sh                     Vollständige Installation
-├── enable-service.sh              Service einmalig aktivieren
+├── setup-service.sh               Service einrichten (Autostart bei Boot)
+├── enable-service.sh              Wrapper auf setup-service.sh
 ├── restart-transcription-service.sh  Service neu starten
 ├── run_offline.sh                 Klassisch starten (mit Auto-Restart)
 ├── run_streaming.sh               Streaming an Sprechpausen (mit Auto-Restart)
@@ -53,7 +53,7 @@ sudo usermod -aG input $USER
 `install.sh` erledigt automatisch:
 - System-Pakete (`wl-clipboard`, `ydotool`, `wtype`, Python 3.12, Audio-Libs)
 - Python venv + alle Abhängigkeiten
-- systemd User-Service installieren und aktivieren
+- systemd User-Service einrichten (Autostart bei Rechnerstart, via `setup-service.sh`)
 - Globale Kommandos nach `~/.local/bin/` installieren
 
 ---
@@ -198,20 +198,38 @@ in kleinen Schüben (Standard ~3-5 Wörter) im fokussierten Fenster. Tipp-Backen
 
 ---
 
-## ⚙️ enable-service.sh
+## ⚙️ setup-service.sh — Service einrichten (Autostart bei Rechnerstart)
 
-Installiert und aktiviert den systemd User-Service (Autostart bei Login).
+Richtet den Transcription-Service ein und sorgt dafür, dass er **bei jedem
+Rechnerstart** automatisch läuft.
 
 ```
 VERWENDUNG
-  ./enable-service.sh [OPTIONEN]
+  ./setup-service.sh [MODUS] [OPTIONEN]
+
+MODUS
+  faster-streaming   Wortweises Live-Streaming (faster-whisper)   [Standard]
+  streaming          VAD-Streaming an Sprechpausen (openai-whisper)
+  offline            Klassisch: aufnehmen → stoppen → Clipboard
 
 OPTIONEN
-  -h, --help   Diese Hilfe anzeigen
+  --model NAME   Whisper-Modell (tiny|base|small|medium|large)  (Standard: small)
+  --device IDX   Audio-Gerät-Index (Input+Output)               (Standard: Auto)
+  --no-start     Nur einrichten + aktivieren, nicht sofort starten
+  -h, --help     Diese Hilfe anzeigen
+```
 
-BESCHREIBUNG
-  Kopiert transcription-offline.service nach ~/.config/systemd/user/,
-  aktiviert den Service (Autostart bei Login) und startet ihn sofort.
+**Wie der Autostart funktioniert:** Das Skript erzeugt eine systemd-User-Unit
+(`transcription.service`) mit automatisch erkannten Pfaden, aktiviert
+`loginctl enable-linger` (der User-Manager startet schon bei Boot) und bindet
+die Unit an `graphical-session.target` — sie startet also, sobald die
+Wayland-Sitzung steht (Tippen an der Cursor-Position braucht eine aktive
+Sitzung). `enable-service.sh` ist ein Wrapper auf dieses Skript.
+
+```bash
+./setup-service.sh                         # faster-streaming, Modell small
+./setup-service.sh offline                 # klassischer Offline-Modus
+./setup-service.sh faster-streaming --model tiny   # geringste Latenz
 ```
 
 ---
@@ -240,13 +258,14 @@ Nach `./install.sh` sind diese Kommandos **überall** im Terminal verfügbar:
 | `transcription-start` | Service starten |
 | `transcription-stop` | Service stoppen |
 | `transcription-status` | Status + letzte Log-Zeilen |
+| `transcription-log` | Live-Log (`journalctl -f`) |
 
 Oder direkt mit systemctl:
 ```bash
-systemctl --user status transcription-offline.service
-systemctl --user restart transcription-offline.service
-systemctl --user stop transcription-offline.service
-journalctl --user -u transcription-offline.service -f    # Live-Log
+systemctl --user status transcription.service
+systemctl --user restart transcription.service
+systemctl --user stop transcription.service
+journalctl --user -u transcription.service -f    # Live-Log
 ```
 
 ---
@@ -294,7 +313,7 @@ WHISPER_MODEL=medium ./run_offline.sh
 
 ```bash
 # Live-Log
-journalctl --user -u transcription-offline.service -f
+journalctl --user -u transcription.service -f
 
 # Log-Datei
 tail -f ~/.transcription/transcription_listener.log
