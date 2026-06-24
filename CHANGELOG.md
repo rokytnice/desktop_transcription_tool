@@ -8,9 +8,12 @@ Alle wichtigen Änderungen werden in dieser Datei dokumentiert.
 - **`setup-service.sh`** — flexibles Service-Setup mit **Autostart bei Rechnerstart**
   - Modus wählbar: `faster-streaming` (Standard), `streaming`, `offline`
   - Optionen `--model`, `--device`, `--no-start`
-  - Erzeugt die systemd-User-Unit `transcription.service` **dynamisch** (Repo-Pfad,
-    venv, `XDG_RUNTIME_DIR`, `WAYLAND_DISPLAY` werden automatisch erkannt — nichts
-    hartkodiert)
+  - Erzeugt eine **modus-spezifische** systemd-User-Unit **dynamisch**
+    (`transcription-faster-streaming.service` / `transcription-streaming.service`
+    / `transcription-offline.service`) — Repo-Pfad, venv, `XDG_RUNTIME_DIR`,
+    `WAYLAND_DISPLAY` werden automatisch erkannt, nichts hartkodiert
+  - Beim Einrichten eines Modus werden alle anderen Modus-Units sauber
+    abgeschaltet/entfernt, sodass nie zwei Services gleichzeitig tippen
   - Aktiviert `loginctl enable-linger` (User-Manager startet bei Boot) und bindet
     die Unit an `graphical-session.target` (Start, sobald die Wayland-Sitzung steht)
   - Installiert/aktualisiert die globalen Kommandos `transcription-{start,stop,
@@ -20,8 +23,8 @@ Alle wichtigen Änderungen werden in dieser Datei dokumentiert.
 - `install.sh` delegiert die Service-Einrichtung jetzt an `setup-service.sh`
   (Modus per `TRANSCRIPTION_MODE=…` überschreibbar; Standard `faster-streaming`)
 - `enable-service.sh` ist ein dünner Wrapper auf `setup-service.sh`
-- Service heißt jetzt einheitlich `transcription.service` (vorher
-  `transcription-offline.service`); alte Unit wird beim Setup sauber abgelöst
+- Service-Name enthält jetzt den Modus (`transcription-<modus>.service`); alte
+  Units werden beim Setup sauber abgelöst
 - Statische `transcription-offline.service`-Datei entfernt (Unit wird generiert)
 
 ## [1.6.1] - 2026-06-24

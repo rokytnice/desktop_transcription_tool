@@ -98,7 +98,7 @@ if [[ -n "$DEVICE" ]]; then
 Environment=\"AUDIO_OUTPUT_DEVICE=$DEVICE\""
 fi
 
-SERVICE="transcription.service"
+SERVICE="transcription-$MODE.service"
 USER_UNIT_DIR="$HOME/.config/systemd/user"
 SERVICE_DST="$USER_UNIT_DIR/$SERVICE"
 
@@ -106,6 +106,7 @@ echo "╔═══════════════════════�
 echo "║  Transcription-Service einrichten                  ║"
 echo "╚════════════════════════════════════════════════════╝"
 echo "  Modus       : $MODE  ($DESC)"
+echo "  Service     : $SERVICE"
 echo "  Modell      : $WHISPER_MODEL"
 echo "  Audio-Gerät : ${DEVICE:-Auto (-a)}"
 echo "  Repo        : $REPO_DIR"
@@ -119,13 +120,16 @@ if [[ "$(loginctl show-user "$USER" -p Linger --value 2>/dev/null)" != "yes" ]];
     loginctl enable-linger "$USER"
 fi
 
-# ── Alten Offline-Service ablösen (Namenswechsel) ───────────────────────────
-if systemctl --user list-unit-files transcription-offline.service &>/dev/null \
-   && [[ -f "$USER_UNIT_DIR/transcription-offline.service" ]]; then
-    echo "→ Alten transcription-offline.service ablösen..."
-    systemctl --user disable --now transcription-offline.service 2>/dev/null || true
-    rm -f "$USER_UNIT_DIR/transcription-offline.service"
-fi
+# ── Andere/alte Transcription-Units ablösen (nur einer darf tippen) ─────────
+for other in transcription.service transcription-offline.service \
+             transcription-streaming.service transcription-faster-streaming.service; do
+    [[ "$other" == "$SERVICE" ]] && continue
+    if [[ -f "$USER_UNIT_DIR/$other" ]] || systemctl --user is-enabled "$other" &>/dev/null; then
+        echo "→ $other ablösen..."
+        systemctl --user disable --now "$other" 2>/dev/null || true
+        rm -f "$USER_UNIT_DIR/$other"
+    fi
+done
 
 # ── Unit erzeugen ───────────────────────────────────────────────────────────
 echo "→ $SERVICE schreiben..."

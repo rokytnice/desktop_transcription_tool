@@ -219,12 +219,14 @@ OPTIONEN
   -h, --help     Diese Hilfe anzeigen
 ```
 
-**Wie der Autostart funktioniert:** Das Skript erzeugt eine systemd-User-Unit
-(`transcription.service`) mit automatisch erkannten Pfaden, aktiviert
-`loginctl enable-linger` (der User-Manager startet schon bei Boot) und bindet
-die Unit an `graphical-session.target` — sie startet also, sobald die
-Wayland-Sitzung steht (Tippen an der Cursor-Position braucht eine aktive
-Sitzung). `enable-service.sh` ist ein Wrapper auf dieses Skript.
+**Wie der Autostart funktioniert:** Das Skript erzeugt eine modus-spezifische
+systemd-User-Unit (`transcription-<modus>.service`) mit automatisch erkannten
+Pfaden, aktiviert `loginctl enable-linger` (der User-Manager startet schon bei
+Boot) und bindet die Unit an `graphical-session.target` — sie startet also,
+sobald die Wayland-Sitzung steht (Tippen an der Cursor-Position braucht eine
+aktive Sitzung). Beim Wechsel des Modus werden die anderen Units automatisch
+abgeschaltet, sodass immer nur einer läuft. `enable-service.sh` ist ein Wrapper
+auf dieses Skript.
 
 ```bash
 ./setup-service.sh                         # faster-streaming, Modell small
@@ -260,12 +262,11 @@ Nach `./install.sh` sind diese Kommandos **überall** im Terminal verfügbar:
 | `transcription-status` | Status + letzte Log-Zeilen |
 | `transcription-log` | Live-Log (`journalctl -f`) |
 
-Oder direkt mit systemctl:
+Die globalen Kommandos sind **modus-unabhängig** — sie zeigen automatisch auf
+den zuletzt eingerichteten Modus. Direkt mit systemctl (Unit-Name = `transcription-<modus>.service`):
 ```bash
-systemctl --user status transcription.service
-systemctl --user restart transcription.service
-systemctl --user stop transcription.service
-journalctl --user -u transcription.service -f    # Live-Log
+systemctl --user status transcription-faster-streaming.service
+journalctl --user -u transcription-faster-streaming.service -f    # Live-Log
 ```
 
 ---
@@ -313,7 +314,7 @@ WHISPER_MODEL=medium ./run_offline.sh
 
 ```bash
 # Live-Log
-journalctl --user -u transcription.service -f
+journalctl --user -u transcription-faster-streaming.service -f
 
 # Log-Datei
 tail -f ~/.transcription/transcription_listener.log

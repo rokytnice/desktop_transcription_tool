@@ -4,9 +4,11 @@ _Zuletzt aktualisiert: 2026-06-24_
 
 ## Überblick
 
-Der Transcription-Tool läuft als **systemd-User-Service** (`transcription.service`)
-und startet automatisch bei Rechnerstart. Eingerichtet wird er mit
-`./setup-service.sh [MODUS]` (Wrapper: `enable-service.sh`).
+Der Transcription-Tool läuft als **systemd-User-Service** und startet automatisch
+bei Rechnerstart. Eingerichtet wird er mit `./setup-service.sh [MODUS]` (Wrapper:
+`enable-service.sh`). Der Unit-Name enthält den Modus:
+`transcription-faster-streaming.service`, `transcription-streaming.service` oder
+`transcription-offline.service`.
 
 ## Warum User-Service (nicht System-Service)
 
@@ -38,10 +40,12 @@ noch nicht ganz oben).
 - Erkennt **alle Pfade automatisch** (Repo, `offline/.venv`, `XDG_RUNTIME_DIR`,
   `WAYLAND_DISPLAY`) — nichts hartkodiert, funktioniert auch nach Repo-Umzug
 - Optionen: `--model NAME`, `--device IDX`, `--no-start`
-- Generiert `~/.config/systemd/user/transcription.service` **dynamisch**
+- Generiert `~/.config/systemd/user/transcription-<modus>.service` **dynamisch**
   (kein statisches Unit-File mehr im Repo)
-- Installiert globale Kommandos `transcription-{start,stop,restart,status,log}`
-- Löst eine evtl. vorhandene alte `transcription-offline.service` sauber ab
+- Installiert globale Kommandos `transcription-{start,stop,restart,status,log}`,
+  die immer auf den zuletzt eingerichteten Modus zeigen
+- Löst beim Setup **alle anderen** Modus-Units (und die alten Namen
+  `transcription.service` / `transcription-offline.service`) sauber ab
   (disable + entfernen), damit nie zwei Services gleichzeitig tippen
 
 `install.sh` delegiert die Service-Einrichtung an `setup-service.sh`
