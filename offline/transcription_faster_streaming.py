@@ -104,19 +104,32 @@ def get_model():
 
 # ─────────────────────────── Beeps ───────────────────────────
 
-def _generate_beep_wav(filepath, frequency=1000, duration=0.2, volume=0.5):
+def _tone(frequencies, duration=0.2, volume=0.5):
+    """Render one or more tones (a sequence of frequencies) as an int16 stereo array."""
+    if not isinstance(frequencies, (list, tuple)):
+        frequencies = [frequencies]
     sample_rate = 48000
-    samples = int(sample_rate * duration)
-    t = np.linspace(0, duration, samples)
-    waveform = (np.sin(2 * np.pi * frequency * t) * volume * 32767).astype(np.int16)
-    waveform_stereo = np.column_stack([waveform, waveform])
+    seg = duration / len(frequencies)
+    parts = []
+    for freq in frequencies:
+        n = int(sample_rate * seg)
+        t = np.linspace(0, seg, n, endpoint=False)
+        env = np.minimum(1.0, np.minimum(t, seg - t) * 60)  # short fade in/out
+        parts.append(np.sin(2 * np.pi * freq * t) * env * volume)
+    waveform = (np.concatenate(parts) * 32767).astype(np.int16)
+    return np.column_stack([waveform, waveform]), sample_rate
+
+
+def _generate_beep_wav(filepath, frequency=1000, duration=0.2, volume=0.5):
+    waveform_stereo, sample_rate = _tone(frequency, duration, volume)
     sf.write(filepath, waveform_stereo, sample_rate, subtype='PCM_16')
 
 
 START_BEEP_PATH = os.path.join(TRANSCRIPTION_DIR, "start_beep.wav")
 STOP_BEEP_PATH = os.path.join(TRANSCRIPTION_DIR, "stop_beep.wav")
+# Start: single rising blip. Stop: descending two-tone (900→500 Hz) — clearly distinct.
 _generate_beep_wav(START_BEEP_PATH, frequency=800, duration=0.15, volume=0.5)
-_generate_beep_wav(STOP_BEEP_PATH, frequency=1200, duration=0.2, volume=0.5)
+_generate_beep_wav(STOP_BEEP_PATH, frequency=[900, 500], duration=0.3, volume=0.5)
 
 
 def play_beep(filepath):
