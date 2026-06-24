@@ -9,6 +9,7 @@
 #   faster-streaming   Wortweises Live-Streaming (faster-whisper)   [Standard]
 #   streaming          VAD-Streaming an Sprechpausen (openai-whisper)
 #   offline            Klassisch: aufnehmen → stoppen → Clipboard
+#   claude             Sprache → Claude Code → Antwort im Fenster
 #
 # OPTIONEN
 #   --model NAME   Whisper-Modell (tiny|base|small|medium|large)  (Standard: small)
@@ -58,7 +59,7 @@ DO_START=1
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        faster-streaming|streaming|offline) MODE="$1"; shift ;;
+        faster-streaming|streaming|offline|claude) MODE="$1"; shift ;;
         --model) WHISPER_MODEL="$2"; shift 2 ;;
         --device) DEVICE="$2"; shift 2 ;;
         --no-start) DO_START=0; shift ;;
@@ -71,6 +72,7 @@ case "$MODE" in
     offline)          PY_SCRIPT="transcription_offline.py";          DESC="Offline (aufnehmen → stoppen → Clipboard)" ;;
     streaming)        PY_SCRIPT="transcription_streaming.py";        DESC="VAD-Streaming (openai-whisper)" ;;
     faster-streaming) PY_SCRIPT="transcription_faster_streaming.py"; DESC="Live-Streaming (faster-whisper)" ;;
+    claude)           PY_SCRIPT="transcription_claude.py";           DESC="Sprache → Claude Code → Fenster" ;;
 esac
 
 # ── Pfade automatisch erkennen ──────────────────────────────────────────────
@@ -90,6 +92,7 @@ fi
 
 RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 WL_DISPLAY="${WAYLAND_DISPLAY:-wayland-0}"
+X_DISPLAY="${DISPLAY:-:0}"   # XWayland — wird vom claude-Modus (Tk-Fenster) gebraucht
 
 # Audio-Gerät: festes Gerät → -a überschreiben, sonst Auto (-a = ein Gerät In+Out)
 DEVICE_ENV=""
@@ -122,7 +125,8 @@ fi
 
 # ── Andere/alte Transcription-Units ablösen (nur einer darf tippen) ─────────
 for other in transcription.service transcription-offline.service \
-             transcription-streaming.service transcription-faster-streaming.service; do
+             transcription-streaming.service transcription-faster-streaming.service \
+             transcription-claude.service; do
     [[ "$other" == "$SERVICE" ]] && continue
     if [[ -f "$USER_UNIT_DIR/$other" ]] || systemctl --user is-enabled "$other" &>/dev/null; then
         echo "→ $other ablösen..."
@@ -147,6 +151,7 @@ Type=simple
 Environment="WHISPER_MODEL=$WHISPER_MODEL"
 Environment="XDG_RUNTIME_DIR=$RUNTIME_DIR"
 Environment="WAYLAND_DISPLAY=$WL_DISPLAY"
+Environment="DISPLAY=$X_DISPLAY"
 $DEVICE_ENV
 WorkingDirectory=$OFFLINE_DIR
 ExecStart=$VENV_PY $OFFLINE_DIR/$PY_SCRIPT -a

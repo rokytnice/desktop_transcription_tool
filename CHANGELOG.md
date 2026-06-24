@@ -2,6 +2,28 @@
 
 Alle wichtigen Änderungen werden in dieser Datei dokumentiert.
 
+## [1.8.0] - 2026-06-24
+
+### Added
+- **Sprich mit Claude Code** — neuer Modus `run_claude.sh` /
+  `offline/transcription_claude.py`
+  - Der gesprochene Text wird **nicht** an der Cursor-Position getippt, sondern
+    als Prompt an die Claude-Code-CLI (`claude -p`) übergeben; Claudes Antwort
+    erscheint **live** in einem eigenen Fenster (Tkinter, Dark-Theme).
+  - Aufnahme, Whisper-Transkription, Geräteauswahl und die Alt+Alt-Erkennung
+    werden aus `transcription_offline.py` wiederverwendet (Import + Monkeypatch
+    der Ausgabe) — nur die Ausgabe ist ersetzt.
+  - **Gesprächskontext bleibt erhalten:** Der erste Sprach-Turn legt mit
+    `--session-id` eine feste Session an, Folge-Turns setzen sie mit `--resume`
+    fort. So entsteht ein echtes Gespräch über mehrere Sprach-Eingaben hinweg.
+  - Konfigurierbar per Env: `CLAUDE_CWD` (Arbeitsverzeichnis), `CLAUDE_MODEL`
+    (z. B. `opus`, `sonnet`), `CLAUDE_PERMISSION_MODE` (z. B. `plan`).
+  - **`setup-service.sh claude`** richtet den Modus als Autostart-Service ein;
+    die generierte Unit setzt zusätzlich `DISPLAY` (XWayland), da das Tk-Fenster
+    es braucht.
+  - Voraussetzung: `claude`-CLI installiert und eingeloggt (wird beim Start
+    geprüft).
+
 ## [1.7.1] - 2026-06-24
 
 ### Fixed

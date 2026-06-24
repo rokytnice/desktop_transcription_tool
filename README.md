@@ -1,12 +1,16 @@
 # Desktop Transcription Tool 🎤
 
-Offline-Spracherkennung mit Whisper. Drei Modi:
+Offline-Spracherkennung mit Whisper. Vier Modi:
 
 - **Klassisch** (`run_offline.sh`) — aufnehmen → stoppen → Text in Zwischenablage (Ctrl+V).
 - **Streaming an Sprechpausen** (`run_streaming.sh`) — VAD-basiert: tippt die erkannte
   Phrase **an jeder Sprechpause** live an der Cursor-Position. Kein Warten, kein Ctrl+V.
 - **Wortweises Live-Streaming** (`run_faster_streaming.sh`) — faster-whisper +
   LocalAgreement: tippt Text **wortweise WÄHREND des Sprechens**, auch mitten im Satz.
+- **Sprich mit Claude Code** (`run_claude.sh`) — der gesprochene Text geht **nicht**
+  an den Cursor, sondern als Prompt an die Claude-Code-CLI; Claudes Antwort erscheint
+  live in einem eigenen Fenster. Über eine feste Session bleibt der Gesprächskontext
+  über mehrere Sprach-Eingaben hinweg erhalten.
 
 ## 📁 Projektstruktur
 
@@ -16,6 +20,8 @@ desktop_transcription_tool/
 │   ├── transcription_offline.py   Klassisch: aufnehmen → stoppen → einfügen
 │   ├── transcription_streaming.py Streaming an Sprechpausen (VAD)
 │   ├── transcription_faster_streaming.py  Wortweises Live-Streaming (faster-whisper)
+│   ├── transcription_claude.py    Sprich mit Claude Code (Sprache → claude -p → Fenster)
+│   ├── _singleinstance.py         Single-Instance-Sperre (nur EINE Instanz tippt)
 │   ├── install.sh                 Offline-spezifische Installation
 │   ├── run.sh                     Direkt starten (ohne Auto-Restart)
 │   ├── requirements.txt
@@ -34,7 +40,8 @@ desktop_transcription_tool/
 ├── restart-transcription-service.sh  Service neu starten
 ├── run_offline.sh                 Klassisch starten (mit Auto-Restart)
 ├── run_streaming.sh               Streaming an Sprechpausen (mit Auto-Restart)
-└── run_faster_streaming.sh        Wortweises Live-Streaming (mit Auto-Restart)
+├── run_faster_streaming.sh        Wortweises Live-Streaming (mit Auto-Restart)
+└── run_claude.sh                  Sprich mit Claude Code (mit Auto-Restart)
 ```
 
 ---
@@ -198,6 +205,51 @@ in kleinen Schüben (Standard ~3-5 Wörter) im fokussierten Fenster. Tipp-Backen
 
 ---
 
+## 🤖 run_claude.sh (Sprich mit Claude Code)
+
+Statt den transkribierten Text an der Cursor-Position zu tippen, wird er als
+**Prompt an die Claude-Code-CLI** (`claude -p`) übergeben. Claudes Antwort
+erscheint live in einem eigenen **Fenster** (Tkinter). Über eine feste Session
+bleibt der Gesprächskontext über mehrere Sprach-Eingaben hinweg erhalten — es
+entsteht ein echtes Gespräch per Stimme.
+
+```
+VERWENDUNG
+  ./run_claude.sh [OPTIONEN]
+
+OPTIONEN
+  (kein Flag)   Interaktive Geräteauswahl beim Start
+  -a, --auto    Ein Gerät für Input UND Output wählen (z.B. Jabra Headset)
+  -d, --default Schnellstart mit System-Default-Geräten, kein Menü
+  -h, --help    Diese Hilfe anzeigen
+
+UMGEBUNGSVARIABLEN
+  WHISPER_MODEL           tiny | base | small | medium | large  (Standard: small)
+  CLAUDE_CWD              Arbeitsverzeichnis für Claude           (Standard: $HOME)
+  CLAUDE_MODEL            Modell für Claude (z. B. sonnet, opus)  (optional)
+  CLAUDE_PERMISSION_MODE  z. B. plan, acceptEdits                 (optional)
+
+BEDIENUNG
+  Alt+Alt   Aufnahme starten / stoppen → an Claude übergeben
+  Ctrl+C / Fenster schließen   Beenden
+
+BEISPIELE
+  ./run_claude.sh                      Interaktive Geräteauswahl
+  ./run_claude.sh -a                   Jabra-Modus: ein Gerät für alles
+  CLAUDE_CWD=~/projects ./run_claude.sh   Claude im Projektordner laufen lassen
+  CLAUDE_MODEL=opus ./run_claude.sh    Opus-Modell verwenden
+```
+
+> **Voraussetzung:** Die `claude`-CLI (Claude Code) muss installiert und
+> eingeloggt sein. Der erste Sprach-Turn legt mit `--session-id` eine Session an,
+> Folge-Turns setzen sie mit `--resume` fort — so bleibt der Kontext erhalten.
+>
+> **Hinweis (Wayland):** Das Fenster nutzt Tkinter und braucht XWayland (`DISPLAY`,
+> meist `:0`). Als Service setzt `setup-service.sh claude` die `DISPLAY`-Variable
+> automatisch.
+
+---
+
 ## ⚙️ setup-service.sh — Service einrichten (Autostart bei Rechnerstart)
 
 Richtet den Transcription-Service ein und sorgt dafür, dass er **bei jedem
@@ -211,6 +263,7 @@ MODUS
   faster-streaming   Wortweises Live-Streaming (faster-whisper)   [Standard]
   streaming          VAD-Streaming an Sprechpausen (openai-whisper)
   offline            Klassisch: aufnehmen → stoppen → Clipboard
+  claude             Sprache → Claude Code → Antwort im Fenster
 
 OPTIONEN
   --model NAME   Whisper-Modell (tiny|base|small|medium|large)  (Standard: small)
@@ -232,6 +285,7 @@ auf dieses Skript.
 ./setup-service.sh                         # faster-streaming, Modell small
 ./setup-service.sh offline                 # klassischer Offline-Modus
 ./setup-service.sh faster-streaming --model tiny   # geringste Latenz
+./setup-service.sh claude                  # Sprich mit Claude Code (Fenster)
 ```
 
 ---
