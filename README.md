@@ -2,7 +2,8 @@
 
 Offline-Spracherkennung mit Whisper. Vier Modi:
 
-- **Klassisch** (`run_offline.sh`) — aufnehmen → stoppen → Text in Zwischenablage (Ctrl+V).
+- **Klassisch** (`run_offline.sh`) — aufnehmen → stoppen → Text wird **direkt an der
+  Cursor-Position getippt** (ydotool, kein Ctrl+V mehr nötig).
 - **Streaming an Sprechpausen** (`run_streaming.sh`) — VAD-basiert: tippt die erkannte
   Phrase **an jeder Sprechpause** live an der Cursor-Position. Kein Warten, kein Ctrl+V.
 - **Wortweises Live-Streaming** (`run_faster_streaming.sh`) — faster-whisper +
@@ -73,7 +74,7 @@ Hintergrund-Service (kein doppeltes Tippen) und startet die gewählte Variante.
 
 ```bash
 transcription              # stream (Standard) — wortweise live beim Sprechen
-transcription offline      # alte nicht-streaming Version (aufnehmen → stoppen → Ctrl+V)
+transcription offline      # alte nicht-streaming Version (aufnehmen → stoppen → am Cursor getippt)
 transcription vad          # Streaming an jeder Sprechpause (Voice Activity Detection)
 transcription claude       # Sprache → Claude Code → Antwort im Fenster
 ```
@@ -82,7 +83,7 @@ transcription claude       # Sprache → Claude Code → Antwort im Fenster
 
 | Modus | Verhalten | Script dahinter |
 |---|---|---|
-| `offline` | aufnehmen → Alt+Alt stoppen → Text per Ctrl+V einfügen | `run_offline.sh` |
+| `offline` | aufnehmen → Alt+Alt stoppen → Text **direkt am Cursor** getippt | `run_offline.sh` |
 | `stream` *(Standard)* | Text erscheint **wortweise WÄHREND** du sprichst | `run_faster_streaming.sh` |
 | `vad` | Text erscheint **an jeder Sprechpause** (ganze Phrase) | `run_streaming.sh` |
 | `claude` | gesprochener Text → `claude -p` → Antwort im Fenster | `run_claude.sh` |
@@ -111,7 +112,11 @@ ist nur der bequeme Wrapper darum.
 
 ## ▶️ run_offline.sh
 
-Startet das Tool manuell mit automatischem Neustart bei Absturz.
+Startet das Tool manuell mit automatischem Neustart bei Absturz. Nach dem Stoppen
+(Alt+Alt) wird der transkribierte Text **direkt an der Cursor-Position getippt**
+(gemeinsames Tipp-Backend: ydotool → wtype → Clipboard-Fallback). Ein manuelles
+Ctrl+V ist nicht mehr nötig; nur wenn kein Tipp-Tool verfügbar ist, landet der Text
+ersatzweise in der Zwischenablage.
 
 ```
 VERWENDUNG
@@ -306,7 +311,7 @@ VERWENDUNG
 MODUS
   faster-streaming   Wortweises Live-Streaming (faster-whisper)   [Standard]
   streaming          VAD-Streaming an Sprechpausen (openai-whisper)
-  offline            Klassisch: aufnehmen → stoppen → Clipboard
+  offline            Klassisch: aufnehmen → stoppen → am Cursor getippt
   claude             Sprache → Claude Code → Antwort im Fenster
 
 OPTIONEN
@@ -376,7 +381,7 @@ journalctl --user -u transcription-faster-streaming.service -f    # Live-Log
 | Aufnahme starten | **Alt + Alt** (Doppeltipp) |
 | Aufnahme stoppen + transkribieren | **Alt + Alt** (Doppeltipp) |
 | Programm beenden | **Ctrl+C** |
-| Text einfügen (nach Transkription) | **Ctrl+V** |
+| Text einfügen (nach Transkription) | *automatisch am Cursor getippt* |
 
 ---
 
@@ -430,7 +435,8 @@ Der OOM-Killer beendet den Prozess wenn RAM knapp wird (Whisper lädt Audio komp
 sudo apt install wl-clipboard
 ```
 
-**Streaming tippt nicht am Cursor (nur Zwischenablage)?**
+**Text wird nicht am Cursor getippt (landet nur in der Zwischenablage)?**
+Gilt für alle Modi (offline, stream, vad) — sie nutzen dasselbe Tipp-Backend.
 ```bash
 # ydotool + Daemon installieren
 sudo apt install ydotool wtype

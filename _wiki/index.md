@@ -10,7 +10,8 @@ _Zuletzt aktualisiert: 2026-06-24_
 ## Kurzüberblick
 Aufnahme → Whisper-Transkription → Text wird an der Cursor-Position getippt,
 ausgelöst per Alt+Alt-Doppeltipp (Wayland/GNOME). Vier Modi:
-- `run_offline.sh` — klassisch: aufnehmen → stoppen → Ctrl+V (Clipboard)
+- `run_offline.sh` — klassisch: aufnehmen → stoppen → Text wird direkt am Cursor
+  getippt (gemeinsames Tipp-Backend `_typer.py`; Clipboard nur als Fallback)
 - `run_streaming.sh` — VAD-Streaming, Text an Sprechpausen (openai-whisper)
 - `run_faster_streaming.sh` — wortweises Live-Streaming (faster-whisper +
   LocalAgreement-2)

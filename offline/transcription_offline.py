@@ -16,6 +16,8 @@ from evdev import InputDevice, ecodes, list_devices
 import threading
 import argparse
 
+import _typer  # gemeinsames Tipp-Backend (ydotool/wtype/Clipboard)
+
 # Ensure the environment is correctly configured
 os.environ["LC_ALL"] = "de_DE.UTF-8"
 os.environ["LANG"] = "de_DE.UTF-8"
@@ -521,27 +523,15 @@ def transcribe_with_whisper(audio_file_path):
         raise
 
 def type_text_in_active_window(text):
-    """Copy text to clipboard using wl-copy (Wayland)"""
-    print(f"\n📋 Copying {len(text)} characters to clipboard...")
-    logger.info(f"Copying to clipboard: {text}")
+    """Type text directly at the cursor position (Wayland).
 
-    try:
-        process = subprocess.Popen(["wl-copy"], stdin=subprocess.PIPE)
-        process.communicate(text.encode('utf-8'))
-        print(f"✓ Text copied to clipboard (wl-copy)")
-        print(f"\n🖱️  Now use Ctrl+V to paste!\n")
-        logger.info("Text copied to clipboard using wl-copy")
-
-    except FileNotFoundError:
-        print("❌ ERROR: wl-copy not found!")
-        print(f"   Install: sudo apt install wl-clipboard")
-        print(f"   Text: {text}")
-        logger.error("wl-copy not found")
-
-    except Exception as e:
-        print(f"❌ Error copying to clipboard: {e}")
-        print(f"   Text: {text}")
-        logger.error(f"Error copying to clipboard: {e}")
+    Uses the shared typing backend (ydotool → wtype → clipboard fallback),
+    so the transcription appears wherever the cursor is — no manual Ctrl+V.
+    """
+    print(f"\n⌨️  Typing {len(text)} characters at cursor ({_typer.TYPER})...")
+    logger.info(f"Typing at cursor ({_typer.TYPER}): {text}")
+    _typer.type_at_cursor(text)
+    print("✓ Text getippt")
 
 
 def transcribe_and_output():
@@ -604,6 +594,9 @@ Beispiele:
     # Nur EINE Transcription-Instanz darf laufen (sonst doppeltes Tippen).
     import _singleinstance
     _singleinstance.acquire_or_exit()
+
+    # Tipp-Backend ermitteln (ydotool/wtype/Clipboard) + ydotoold ggf. starten.
+    print(f"⌨️  Tipp-Backend: {_typer.detect_typer()} (Layout: {_typer.KB_LAYOUT})")
 
     # Interactive mode is TRUE by default, only FALSE if -d is passed
     interactive = not args.default

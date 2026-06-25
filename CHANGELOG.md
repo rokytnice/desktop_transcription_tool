@@ -2,6 +2,24 @@
 
 Alle wichtigen Änderungen werden in dieser Datei dokumentiert.
 
+## [1.9.0] - 2026-06-25
+
+### Changed
+- **Offline-Modus tippt jetzt direkt an der Cursor-Position** statt nur in die
+  Zwischenablage zu kopieren — kein manuelles Ctrl+V mehr nötig.
+  - `type_text_in_active_window()` in `offline/transcription_offline.py` nutzt
+    jetzt das gemeinsame Tipp-Backend mit der Fallback-Kette
+    **ydotool → wtype → Clipboard** (Clipboard nur noch, wenn kein Tipp-Tool da).
+  - Beim Start wird das Backend per `detect_typer()` ermittelt und `ydotoold`
+    bei Bedarf automatisch gestartet.
+
+### Added
+- **`offline/_typer.py`** — gemeinsames Tipp-Backend (ydotool/wtype/Clipboard)
+  inkl. deutschem Layout-Fix (`_DE_KEYMAP`, T1) und Layout-Erkennung. Extrahiert
+  aus der erprobten Streaming-Implementierung als wiederverwendbares Modul.
+  - Hinweis: Modulname bewusst `_typer` statt `_typing` — `_typing` kollidiert
+    mit dem eingebauten CPython-Modul gleichen Namens und würde überschattet.
+
 ## [1.8.0] - 2026-06-24
 
 ### Added

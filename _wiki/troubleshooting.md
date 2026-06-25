@@ -20,8 +20,11 @@ physisch vertauscht, Umlaute liegen auf anderen Keycodes. `ydotool type` hat
 `detect_kb_layout()` (GNOME `org.gnome.desktop.input-sources` → `localectl`),
 überschreibbar per `STREAM_KBLAYOUT=de|us`.
 
-Betrifft `transcription_streaming.py` und `transcription_faster_streaming.py`.
-Der Offline-Modus nutzt Clipboard+Ctrl+V und ist nicht betroffen.
+Betrifft alle Modi: `transcription_streaming.py`,
+`transcription_faster_streaming.py` (je eigene Inline-Kopie) und seit v1.9.0 auch
+den Offline-Modus, der das gemeinsame Modul `offline/_typer.py` nutzt (gleiche
+Keymap/Logik). Der Offline-Modus tippt jetzt direkt am Cursor statt nur in die
+Zwischenablage; Clipboard ist nur noch Fallback, wenn kein Tipp-Tool da ist.
 
 **Wenn ein Keycode falsch wirkt:** Eintrag in `_DE_KEYMAP` korrigieren
 (Keycodes = Linux `input-event-codes.h`, US-Position; de interpretiert sie).
