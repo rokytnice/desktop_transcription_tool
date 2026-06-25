@@ -189,6 +189,71 @@ journalctl --user -u $SERVICE -f
 CMD
 chmod +x "$HOME/.local/bin/transcription-status" "$HOME/.local/bin/transcription-log"
 
+# ── `transcription` — ein Kommando für alle Modi (manueller Start im Terminal) ─
+# Quoted-Heredoc (nichts expandiert), Repo-Pfad per Platzhalter __REPO__ ersetzt.
+cat > "$HOME/.local/bin/transcription" << 'LAUNCHER'
+#!/bin/bash
+#
+# transcription — Desktop Transcription Tool starten (ein Kommando, alle Modi)
+#
+# MODUS
+#   offline    Aufnehmen → stoppen → Text per Ctrl+V einfügen   (nicht-streaming)
+#   stream     Wortweise live beim Sprechen (faster-whisper)    [Standard]
+#   vad        Streaming an jeder Sprechpause (Voice Activity Detection)
+#   claude     Sprache → Claude Code → Antwort im Fenster
+#
+# OPTIONEN (werden an das run_*.sh durchgereicht)
+#   (kein Flag)   -a: ein Gerät für Input+Output (z.B. Jabra)
+#   --menu        interaktive Geräteauswahl (kein -a)
+#   -d            Schnellstart mit Default-Geräten, kein Menü
+#   -h, --help    Diese Hilfe
+#
+# BEISPIELE
+#   transcription            stream-Modus (Standard)
+#   transcription offline    Offline-Modus
+#   transcription vad --menu VAD-Streaming mit Geräteauswahl
+
+if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    sed -n '/^#$/,/^[^#]/p' "$0" | grep '^#' | sed 's/^# \?//'
+    exit 0
+fi
+
+REPO="__REPO__"
+
+MODE="stream"
+case "$1" in
+    offline|stream|vad|claude) MODE="$1"; shift ;;
+esac
+case "$MODE" in
+    offline) SCRIPT="run_offline.sh" ;;
+    stream)  SCRIPT="run_faster_streaming.sh" ;;
+    vad)     SCRIPT="run_streaming.sh" ;;
+    claude)  SCRIPT="run_claude.sh" ;;
+esac
+
+# Laufenden Transcription-Service stoppen (gegen doppeltes Tippen).
+for unit in "$HOME"/.config/systemd/user/transcription-*.service; do
+    [[ -e "$unit" ]] || continue
+    name="$(basename "$unit")"
+    if systemctl --user is-active --quiet "$name"; then
+        echo "→ stoppe laufenden Service: $name"
+        systemctl --user stop "$name"
+    fi
+done
+
+# Geräte-Default: ohne Argumente -a; --menu = interaktiv (kein -a)
+if [[ $# -eq 0 ]]; then
+    set -- -a
+elif [[ "$1" == "--menu" ]]; then
+    shift
+fi
+
+echo "→ Modus: $MODE  ($SCRIPT)"
+exec "$REPO/$SCRIPT" "$@"
+LAUNCHER
+sed -i "s|__REPO__|$REPO_DIR|" "$HOME/.local/bin/transcription"
+chmod +x "$HOME/.local/bin/transcription"
+
 if ! grep -q 'local/bin' "$HOME/.bashrc" 2>/dev/null; then
     echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.bashrc"
 fi

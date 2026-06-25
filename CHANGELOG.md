@@ -23,6 +23,18 @@ Alle wichtigen Änderungen werden in dieser Datei dokumentiert.
     es braucht.
   - Voraussetzung: `claude`-CLI installiert und eingeloggt (wird beim Start
     geprüft).
+- **Globales Kommando `transcription`** — ein Einstiegspunkt für alle Modi
+  (`transcription [offline|stream|vad|claude] [optionen]`). Stoppt vorher
+  automatisch einen laufenden Service (kein doppeltes Tippen), Standard-Modus
+  `stream`. Wird von `setup-service.sh` nach `~/.local/bin/` generiert
+  (Repo-Pfad eingebacken).
+
+### Fixed
+- **`restart-transcription-service.sh`** fand den Service nicht mehr
+  (`Unit transcription.service not found`). Ursache: der alte feste Unit-Name
+  war hartkodiert, die Units heißen seit v1.7.0 aber modus-spezifisch
+  (`transcription-<modus>.service`). Fix: das Skript erkennt die installierte
+  Unit jetzt automatisch.
 
 ## [1.7.1] - 2026-06-24
 

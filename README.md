@@ -65,6 +65,50 @@ sudo usermod -aG input $USER
 
 ---
 
+## ⭐ Schnellstart — `transcription` (ein Kommando, alle Modi)
+
+Der einfachste Weg. Ein globales Kommando, von überall im Terminal aufrufbar —
+es wählt den Modus per Argument, stoppt vorher automatisch einen evtl. laufenden
+Hintergrund-Service (kein doppeltes Tippen) und startet die gewählte Variante.
+
+```bash
+transcription              # stream (Standard) — wortweise live beim Sprechen
+transcription offline      # alte nicht-streaming Version (aufnehmen → stoppen → Ctrl+V)
+transcription vad          # Streaming an jeder Sprechpause (Voice Activity Detection)
+transcription claude       # Sprache → Claude Code → Antwort im Fenster
+```
+
+**Modi:**
+
+| Modus | Verhalten | Script dahinter |
+|---|---|---|
+| `offline` | aufnehmen → Alt+Alt stoppen → Text per Ctrl+V einfügen | `run_offline.sh` |
+| `stream` *(Standard)* | Text erscheint **wortweise WÄHREND** du sprichst | `run_faster_streaming.sh` |
+| `vad` | Text erscheint **an jeder Sprechpause** (ganze Phrase) | `run_streaming.sh` |
+| `claude` | gesprochener Text → `claude -p` → Antwort im Fenster | `run_claude.sh` |
+
+**Optionen** (für alle Modi, werden an das jeweilige `run_*.sh` durchgereicht):
+
+| Option | Wirkung |
+|---|---|
+| *(kein Flag)* | `-a` — ein Gerät für Input **und** Output (z.B. Jabra-Headset) |
+| `--menu` | interaktive Geräteauswahl (kein `-a`) |
+| `-d` | Schnellstart mit System-Default-Geräten, kein Menü |
+| `-h`, `--help` | Hilfe anzeigen |
+
+**Bedienung nach dem Start:** Alt+Alt = Aufnahme starten, Alt+Alt = stoppen.
+Beenden mit Ctrl+C.
+
+> Liegt als `~/.local/bin/transcription`. Falls `command not found`: einmal
+> `source ~/.bashrc` oder ein neues Terminal öffnen (`~/.local/bin` muss im PATH
+> sein). Für **Dauerbetrieb mit Autostart bei Boot** statt Terminal-Start →
+> `setup-service.sh` (siehe unten).
+
+Die `run_*.sh`-Scripts unten kannst du auch direkt aufrufen — `transcription`
+ist nur der bequeme Wrapper darum.
+
+---
+
 ## ▶️ run_offline.sh
 
 Startet das Tool manuell mit automatischem Neustart bei Absturz.
