@@ -18,9 +18,12 @@ Lokale Spracherkennung mit OpenAI Whisper - **keine API Key erforderlich!**
 
 ## Start
 
+Gestartet wird über die Wrapper im Projekt-Root (mit Auto-Restart):
+
 ```bash
-./run.sh                  # Default: nutzt Standard-Geräte
-./run.sh -H              # Interaktiv: Geräte-Auswahl-Menü
+../run_offline.sh         # interaktive Geräteauswahl
+../run_offline.sh -a      # ein Gerät für Input + Output (z.B. Jabra)
+../run_offline.sh -d      # Schnellstart mit Default-Geräten
 ```
 
 ## Bedienung
@@ -30,7 +33,8 @@ Lokale Spracherkennung mit OpenAI Whisper - **keine API Key erforderlich!**
 3. **Alt Tap Tap** → Recording stoppt & transkribiert ⏹️
 4. **Ctrl+C** → Programm beenden
 
-Text wird automatisch in die Zwischenablage kopiert → **Ctrl+V** zum Einfügen!
+Der Text wird direkt an der Cursor-Position getippt (gemeinsames Tipp-Backend
+`_typer.py`; die Zwischenablage ist nur Fallback, wenn kein Tipp-Tool da ist).
 
 ## System-Anforderungen
 

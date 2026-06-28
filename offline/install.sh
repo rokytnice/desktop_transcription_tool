@@ -51,7 +51,6 @@ echo -e "${GREEN}✓ Python packages installed${NC}\n"
 echo -e "${BLUE}[4/4]${NC} Making scripts executable..."
 chmod +x transcription_offline.py
 chmod +x install.sh
-chmod +x run.sh 2>/dev/null || true
 echo -e "${GREEN}✓ Scripts are executable${NC}\n"
 
 # Summary

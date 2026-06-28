@@ -6,8 +6,8 @@
 #   ./setup-service.sh [MODUS] [OPTIONEN]
 #
 # MODUS
-#   faster-streaming   Wortweises Live-Streaming (faster-whisper)   [Standard]
-#   streaming          VAD-Streaming an Sprechpausen (openai-whisper)
+#   streaming          VAD-Streaming an Sprechpausen (openai-whisper)   [Standard]
+#   faster-streaming   Wortweises Live-Streaming (faster-whisper)
 #   offline            Klassisch: aufnehmen → stoppen → Clipboard
 #   claude             Sprache → Claude Code → Antwort im Fenster
 #
@@ -38,7 +38,7 @@
 #   transcription-log       Live-Log (journalctl -f)
 #
 # BEISPIELE
-#   ./setup-service.sh                          faster-streaming, Modell small
+#   ./setup-service.sh                          VAD-Streaming, Modell small
 #   ./setup-service.sh offline                  klassischer Offline-Modus
 #   ./setup-service.sh faster-streaming --model tiny   geringste Latenz
 #   ./setup-service.sh streaming --device 7     festes Audio-Gerät 7
@@ -52,7 +52,7 @@ if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
 fi
 
 # ── Argumente parsen ────────────────────────────────────────────────────────
-MODE="faster-streaming"
+MODE="streaming"
 WHISPER_MODEL="small"
 DEVICE=""
 DO_START=1
@@ -197,9 +197,9 @@ cat > "$HOME/.local/bin/transcription" << 'LAUNCHER'
 # transcription — Desktop Transcription Tool starten (ein Kommando, alle Modi)
 #
 # MODUS
-#   offline    Aufnehmen → stoppen → Text per Ctrl+V einfügen   (nicht-streaming)
-#   stream     Wortweise live beim Sprechen (faster-whisper)    [Standard]
-#   vad        Streaming an jeder Sprechpause (Voice Activity Detection)
+#   offline    Aufnehmen → stoppen → Text wird am Cursor getippt   (nicht-streaming)
+#   stream     Wortweise live beim Sprechen (faster-whisper)
+#   vad        Streaming an jeder Sprechpause (Voice Activity Detection)  [Standard]
 #   claude     Sprache → Claude Code → Antwort im Fenster
 #
 # OPTIONEN (werden an das run_*.sh durchgereicht)
@@ -209,9 +209,9 @@ cat > "$HOME/.local/bin/transcription" << 'LAUNCHER'
 #   -h, --help    Diese Hilfe
 #
 # BEISPIELE
-#   transcription            stream-Modus (Standard)
+#   transcription            vad-Modus (Standard)
 #   transcription offline    Offline-Modus
-#   transcription vad --menu VAD-Streaming mit Geräteauswahl
+#   transcription stream     Wortweises Live-Streaming
 
 if [[ "$1" == "-h" || "$1" == "--help" ]]; then
     sed -n '/^#$/,/^[^#]/p' "$0" | grep '^#' | sed 's/^# \?//'
@@ -220,7 +220,7 @@ fi
 
 REPO="__REPO__"
 
-MODE="stream"
+MODE="vad"
 case "$1" in
     offline|stream|vad|claude) MODE="$1"; shift ;;
 esac

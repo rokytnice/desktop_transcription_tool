@@ -5,10 +5,9 @@ _Zuletzt aktualisiert: 2026-06-24_
 ## Überblick
 
 Der Transcription-Tool läuft als **systemd-User-Service** und startet automatisch
-bei Rechnerstart. Eingerichtet wird er mit `./setup-service.sh [MODUS]` (Wrapper:
-`enable-service.sh`). Der Unit-Name enthält den Modus:
-`transcription-faster-streaming.service`, `transcription-streaming.service` oder
-`transcription-offline.service`.
+bei Rechnerstart. Eingerichtet wird er mit `./setup-service.sh [MODUS]`. Der
+Unit-Name enthält den Modus: `transcription-streaming.service` (Standard, VAD),
+`transcription-faster-streaming.service` oder `transcription-offline.service`.
 
 ## Warum User-Service (nicht System-Service)
 

@@ -24,7 +24,6 @@ desktop_transcription_tool/
 │   ├── transcription_claude.py    Sprich mit Claude Code (Sprache → claude -p → Fenster)
 │   ├── _singleinstance.py         Single-Instance-Sperre (nur EINE Instanz tippt)
 │   ├── install.sh                 Offline-spezifische Installation
-│   ├── run.sh                     Direkt starten (ohne Auto-Restart)
 │   ├── requirements.txt
 │   └── README.md
 │
@@ -37,8 +36,8 @@ desktop_transcription_tool/
 │
 ├── install.sh                     Vollständige Installation
 ├── setup-service.sh               Service einrichten (Autostart bei Boot)
-├── enable-service.sh              Wrapper auf setup-service.sh
 ├── restart-transcription-service.sh  Service neu starten
+├── start.sh                       EIN Script für alle Modi (Menü, ohne Installation)
 ├── run_offline.sh                 Klassisch starten (mit Auto-Restart)
 ├── run_streaming.sh               Streaming an Sprechpausen (mit Auto-Restart)
 ├── run_faster_streaming.sh        Wortweises Live-Streaming (mit Auto-Restart)
@@ -73,9 +72,9 @@ es wählt den Modus per Argument, stoppt vorher automatisch einen evtl. laufende
 Hintergrund-Service (kein doppeltes Tippen) und startet die gewählte Variante.
 
 ```bash
-transcription              # stream (Standard) — wortweise live beim Sprechen
+transcription              # vad (Standard) — Streaming an jeder Sprechpause
 transcription offline      # alte nicht-streaming Version (aufnehmen → stoppen → am Cursor getippt)
-transcription vad          # Streaming an jeder Sprechpause (Voice Activity Detection)
+transcription stream       # wortweise live beim Sprechen (faster-whisper)
 transcription claude       # Sprache → Claude Code → Antwort im Fenster
 ```
 
@@ -84,8 +83,8 @@ transcription claude       # Sprache → Claude Code → Antwort im Fenster
 | Modus | Verhalten | Script dahinter |
 |---|---|---|
 | `offline` | aufnehmen → Alt+Alt stoppen → Text **direkt am Cursor** getippt | `run_offline.sh` |
-| `stream` *(Standard)* | Text erscheint **wortweise WÄHREND** du sprichst | `run_faster_streaming.sh` |
-| `vad` | Text erscheint **an jeder Sprechpause** (ganze Phrase) | `run_streaming.sh` |
+| `stream` | Text erscheint **wortweise WÄHREND** du sprichst | `run_faster_streaming.sh` |
+| `vad` *(Standard)* | Text erscheint **an jeder Sprechpause** (ganze Phrase) | `run_streaming.sh` |
 | `claude` | gesprochener Text → `claude -p` → Antwort im Fenster | `run_claude.sh` |
 
 **Optionen** (für alle Modi, werden an das jeweilige `run_*.sh` durchgereicht):
@@ -107,6 +106,21 @@ Beenden mit Ctrl+C.
 
 Die `run_*.sh`-Scripts unten kannst du auch direkt aufrufen — `transcription`
 ist nur der bequeme Wrapper darum.
+
+### `./start.sh` — ein Script mit Menü (ohne Installation)
+
+Wenn du dir keine Modusnamen merken willst: `start.sh` im Projektordner zeigt ein
+**Auswahlmenü** und startet den gewählten Modus. Funktioniert ohne `setup-service.sh`
+(braucht das globale `transcription`-Kommando nicht).
+
+```bash
+./start.sh              # Menü: 1) offline  2) stream  3) vad (Standard)  4) claude
+./start.sh offline      # oder direkt einen Modus angeben
+./start.sh vad --menu   # mit interaktiver Geräteauswahl
+```
+
+Verhält sich sonst wie `transcription`: stoppt vorher einen laufenden Service und
+reicht Optionen (`-a`/`--menu`/`-d`) an das jeweilige `run_*.sh` durch.
 
 ---
 
@@ -327,11 +341,10 @@ Pfaden, aktiviert `loginctl enable-linger` (der User-Manager startet schon bei
 Boot) und bindet die Unit an `graphical-session.target` — sie startet also,
 sobald die Wayland-Sitzung steht (Tippen an der Cursor-Position braucht eine
 aktive Sitzung). Beim Wechsel des Modus werden die anderen Units automatisch
-abgeschaltet, sodass immer nur einer läuft. `enable-service.sh` ist ein Wrapper
-auf dieses Skript.
+abgeschaltet, sodass immer nur einer läuft.
 
 ```bash
-./setup-service.sh                         # faster-streaming, Modell small
+./setup-service.sh                         # VAD-Streaming, Modell small
 ./setup-service.sh offline                 # klassischer Offline-Modus
 ./setup-service.sh faster-streaming --model tiny   # geringste Latenz
 ./setup-service.sh claude                  # Sprich mit Claude Code (Fenster)
