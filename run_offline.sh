@@ -39,11 +39,24 @@ if [[ "$*" == *"-d"* ]] || [[ "$*" == *"--default"* ]]; then
     export AUDIO_OUTPUT_DEVICE=${AUDIO_OUTPUT_DEVICE:-19}
 fi
 
+RUN_ARGS=("$@")
 while true; do
-    "$(pwd)/.venv/bin/python" transcription_offline.py "$@"
+    "$(pwd)/.venv/bin/python" transcription_offline.py "${RUN_ARGS[@]}"
     EXIT_CODE=$?
     if [ $EXIT_CODE -eq 0 ] || [ $EXIT_CODE -eq 130 ]; then
         break
+    fi
+    if [ $EXIT_CODE -eq 75 ]; then
+        # Eingabegerät verloren → nicht-interaktiv mit Default-Geräten neu starten
+        case " ${RUN_ARGS[*]} " in
+            *" -a "*|*" --auto "*|*" -d "*|*" --default "*) : ;;
+            *) RUN_ARGS+=("-d") ;;
+        esac
+        export AUDIO_DEVICE=${AUDIO_DEVICE:-0}
+        export AUDIO_OUTPUT_DEVICE=${AUDIO_OUTPUT_DEVICE:-19}
+        echo "🔁 Eingabegerät verloren — Neustart mit Default-Einstellungen..."
+        sleep 1
+        continue
     fi
     echo "⚠️  Crashed (exit code $EXIT_CODE), restarting in 3 seconds..."
     sleep 3

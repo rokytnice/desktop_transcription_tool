@@ -69,10 +69,16 @@ esac
 for unit in "$HOME"/.config/systemd/user/transcription-*.service; do
     [[ -e "$unit" ]] || continue
     name="$(basename "$unit")"
-    if systemctl --user is-active --quiet "$name"; then
-        echo "→ stoppe laufenden Service: $name"
-        systemctl --user stop "$name"
-    fi
+    # is-active meldet bei einem gerade (neu) startenden Service "activating" —
+    # dann greift --quiet nicht. Deshalb jeden nicht-inaktiven Zustand stoppen,
+    # sonst blockiert der flappende Service den Single-Instance-Lock.
+    state="$(systemctl --user is-active "$name" 2>/dev/null)"
+    case "$state" in
+        active|activating|reloading|deactivating)
+            echo "→ stoppe laufenden Service: $name ($state)"
+            systemctl --user stop "$name"
+            ;;
+    esac
 done
 
 # ── Geräteauswahl: ohne Flag standardmäßig -a, --menu überspringt das ────────

@@ -36,7 +36,6 @@ desktop_transcription_tool/
 │
 ├── install.sh                     Vollständige Installation
 ├── setup-service.sh               Service einrichten (Autostart bei Boot)
-├── restart-transcription-service.sh  Service neu starten
 ├── start.sh                       EIN Script für alle Modi (Menü, ohne Installation)
 ├── run_offline.sh                 Klassisch starten (mit Auto-Restart)
 ├── run_streaming.sh               Streaming an Sprechpausen (mit Auto-Restart)
@@ -348,20 +347,6 @@ abgeschaltet, sodass immer nur einer läuft.
 ./setup-service.sh offline                 # klassischer Offline-Modus
 ./setup-service.sh faster-streaming --model tiny   # geringste Latenz
 ./setup-service.sh claude                  # Sprich mit Claude Code (Fenster)
-```
-
----
-
-## 🔄 restart-transcription-service.sh
-
-Startet den laufenden Service neu.
-
-```
-VERWENDUNG
-  ./restart-transcription-service.sh [OPTIONEN]
-
-OPTIONEN
-  -h, --help   Diese Hilfe anzeigen
 ```
 
 ---

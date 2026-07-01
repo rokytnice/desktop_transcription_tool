@@ -22,6 +22,9 @@ import sys
 import signal
 import time
 import logging
+import warnings
+# CPU-Betrieb: Whisper nutzt FP32 statt FP16 — die Warnung ist erwartbar, kein Fehler.
+warnings.filterwarnings("ignore", message="FP16 is not supported on CPU; using FP32 instead")
 import whisper
 import torch
 import evdev
@@ -65,7 +68,12 @@ console_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(
 logger.addHandler(console_handler)
 
 _shutdown_requested = False
+_restart_requested = False
 _whisper_model = None
+
+# Exit-Code, den die Wrapper/systemd als "Eingabegerät verloren → mit
+# Default-Einstellungen (nicht-interaktiv) neu starten" interpretieren.
+RESTART_EXIT_CODE = 75
 
 
 def get_audio_device_from_env():
@@ -695,7 +703,9 @@ def monitor_device(device):
                             alt_press_times.clear()
     except OSError as e:
         if not _shutdown_requested:
-            logger.warning(f"Device {device.path} lost ({e}), will rescan...")
+            global _restart_requested
+            logger.warning(f"Device {device.path} lost ({e}), restarting with default settings...")
+            _restart_requested = True
     except Exception as e:
         logger.error(f"Error monitoring {device.path}: {e}")
 
@@ -710,19 +720,28 @@ def process_keyboard_events(devices):
         return ts
 
     threads = start_threads(devices)
-    active_paths = {d.path for d in devices}
 
     try:
         while not _shutdown_requested:
             time.sleep(5)
-            if not _shutdown_requested and not any(t.is_alive() for t in threads):
-                logger.warning("All keyboard threads died, rescanning devices...")
-                try:
-                    new_devices = find_keyboard_devices()
-                    threads = start_threads(new_devices)
-                    active_paths = {d.path for d in new_devices}
-                except Exception as e:
-                    logger.error(f"Rescan failed: {e}")
+            device_lost = _restart_requested or not any(t.is_alive() for t in threads)
+            if not _shutdown_requested and device_lost:
+                logger.warning(
+                    "Keyboard device lost — exiting to restart with default settings "
+                    f"(exit {RESTART_EXIT_CODE})."
+                )
+                print("\n🔁 Eingabegerät verloren — Neustart mit Default-Einstellungen...")
+                if _transcriber.active:
+                    try:
+                        _transcriber.stop()
+                    except Exception:
+                        pass
+                for device in devices:
+                    try:
+                        device.close()
+                    except Exception:
+                        pass
+                os._exit(RESTART_EXIT_CODE)
     except KeyboardInterrupt:
         pass
 

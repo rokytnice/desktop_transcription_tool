@@ -12,8 +12,11 @@ Lokale Spracherkennung mit OpenAI Whisper - **keine API Key erforderlich!**
 
 ## Installation
 
+Die Installation läuft zentral über den Master-Installer im Projekt-Root
+(richtet venv, Pakete und den Autostart-Service für alle Modi ein):
+
 ```bash
-./install.sh
+../install.sh
 ```
 
 ## Start

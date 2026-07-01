@@ -69,10 +69,8 @@ echo -e "${BLUE}[4/6]${NC} Making scripts executable..."
 chmod +x offline/transcription_offline.py
 chmod +x offline/transcription_streaming.py
 chmod +x offline/transcription_faster_streaming.py
-chmod +x offline/install.sh
 chmod +x install.sh
 chmod +x setup-service.sh
-chmod +x restart-transcription-service.sh
 echo -e "${GREEN}✓ Scripts are executable${NC}\n"
 
 # 5. Install service + global commands (delegiert an setup-service.sh)
@@ -91,7 +89,7 @@ echo -e "   (Run ${YELLOW}source ~/.bashrc${NC} if commands not found yet)\n"
 
 # 6. Make management scripts executable
 echo -e "${BLUE}[6/6]${NC} Finalizing..."
-chmod +x run_offline.sh run_streaming.sh run_faster_streaming.sh run_claude.sh start.sh setup-service.sh restart-transcription-service.sh
+chmod +x run_offline.sh run_streaming.sh run_faster_streaming.sh run_claude.sh start.sh setup-service.sh
 echo -e "${GREEN}✓ Done${NC}\n"
 
 # Summary
