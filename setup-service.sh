@@ -6,9 +6,9 @@
 #   ./setup-service.sh [MODUS] [OPTIONEN]
 #
 # MODUS
-#   streaming          VAD-Streaming an Sprechpausen (openai-whisper)   [Standard]
+#   offline            Klassisch: aufnehmen → stoppen → am Cursor tippen  [Standard]
+#   streaming          VAD-Streaming an Sprechpausen (openai-whisper)
 #   faster-streaming   Wortweises Live-Streaming (faster-whisper)
-#   offline            Klassisch: aufnehmen → stoppen → Clipboard
 #   claude             Sprache → Claude Code → Antwort im Fenster
 #
 # OPTIONEN
@@ -38,10 +38,10 @@
 #   transcription-log       Live-Log (journalctl -f)
 #
 # BEISPIELE
-#   ./setup-service.sh                          VAD-Streaming, Modell small
-#   ./setup-service.sh offline                  klassischer Offline-Modus
+#   ./setup-service.sh                          Offline-Modus (Standard), Modell small
+#   ./setup-service.sh streaming                VAD-Streaming an Sprechpausen
 #   ./setup-service.sh faster-streaming --model tiny   geringste Latenz
-#   ./setup-service.sh streaming --device 7     festes Audio-Gerät 7
+#   ./setup-service.sh offline --device 7       festes Audio-Gerät 7
 
 set -euo pipefail
 
@@ -52,7 +52,7 @@ if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
 fi
 
 # ── Argumente parsen ────────────────────────────────────────────────────────
-MODE="streaming"
+MODE="offline"
 WHISPER_MODEL="small"
 DEVICE=""
 DO_START=1
@@ -148,6 +148,15 @@ PartOf=graphical-session.target
 
 [Service]
 Type=simple
+# Höhere Priorität: mehr CPU-/IO-Anteil unter Last (cgroup-Gewichte, brauchen
+# KEIN root — Default ist 100, hier deutlich höher, damit die Whisper-
+# Transkription auch bei ausgelastetem System flüssig bleibt).
+CPUWeight=900
+IOWeight=900
+# Negatives Nice (echte Scheduler-Priorität) ist für User-Services standardmäßig
+# gesperrt (RLIMIT_NICE=0). Aktivieren mit:
+#   echo '$USER  -  nice  -10' | sudo tee /etc/security/limits.d/transcription-nice.conf
+# danach neu einloggen und in dieser Unit `Nice=-10` ergänzen.
 Environment="WHISPER_MODEL=$WHISPER_MODEL"
 Environment="XDG_RUNTIME_DIR=$RUNTIME_DIR"
 Environment="WAYLAND_DISPLAY=$WL_DISPLAY"
@@ -155,7 +164,10 @@ Environment="DISPLAY=$X_DISPLAY"
 $DEVICE_ENV
 WorkingDirectory=$OFFLINE_DIR
 ExecStart=$VENV_PY $OFFLINE_DIR/$PY_SCRIPT -a
-Restart=always
+# on-failure statt always: sauberer Exit 0 (z. B. Single-Instance-Lock belegt,
+# weil eine manuelle Instanz läuft) löst KEINEN Neustart aus — sonst hämmert der
+# Service alle 10s neu. Device-lost (Exit 75) und Crashes sind non-zero → Restart.
+Restart=on-failure
 RestartSec=10
 StandardOutput=journal
 StandardError=journal
@@ -232,6 +244,9 @@ case "$MODE" in
 esac
 
 # Laufenden Transcription-Service stoppen (gegen doppeltes Tippen).
+# Gestoppte Units merken → beim Beenden wieder starten (sonst bleibt der
+# Autostart-Service nach einem manuellen `transcription`-Lauf dauerhaft aus).
+STOPPED_UNITS=()
 for unit in "$HOME"/.config/systemd/user/transcription-*.service; do
     [[ -e "$unit" ]] || continue
     name="$(basename "$unit")"
@@ -243,9 +258,25 @@ for unit in "$HOME"/.config/systemd/user/transcription-*.service; do
         active|activating|reloading|deactivating)
             echo "→ stoppe laufenden Service: $name ($state)"
             systemctl --user stop "$name"
+            STOPPED_UNITS+=("$name")
             ;;
     esac
 done
+
+# Beim Beenden (Ctrl+C, normaler Exit, Kill) die gestoppten Services wieder
+# hochfahren. Kein `exec`, damit der Trap überhaupt greifen kann.
+restore_services() {
+    trap - EXIT INT TERM   # nur EINMAL laufen (INT feuert sonst zusätzlich EXIT)
+    [[ ${#STOPPED_UNITS[@]} -eq 0 ]] && return 0
+    # Kurz warten: bei Ctrl+C kann das Python-Kind den Single-Instance-Lock noch
+    # halten — der Service würde sonst sofort mit Exit 0 wieder aussteigen.
+    sleep 1
+    for name in "${STOPPED_UNITS[@]}"; do
+        echo "→ starte Service wieder: $name"
+        systemctl --user start "$name" 2>/dev/null || true
+    done
+}
+trap restore_services EXIT INT TERM
 
 # Geräte-Default: ohne Argumente -a; --menu = interaktiv (kein -a)
 if [[ $# -eq 0 ]]; then
@@ -255,7 +286,7 @@ elif [[ "$1" == "--menu" ]]; then
 fi
 
 echo "→ Modus: $MODE  ($SCRIPT)"
-exec "$REPO/$SCRIPT" "$@"
+"$REPO/$SCRIPT" "$@"
 LAUNCHER
 sed -i "s|__REPO__|$REPO_DIR|" "$HOME/.local/bin/transcription"
 chmod +x "$HOME/.local/bin/transcription"
