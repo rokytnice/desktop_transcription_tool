@@ -167,7 +167,7 @@ def select_output_device(interactive=False):
             print("Invalid selection!")
 
 # Select single device for both input and output
-def select_auto_device():
+def select_auto_device(interactive=False):
     """Select ONE device for both input and output"""
     global device_index, output_device_index
 
@@ -183,9 +183,10 @@ def select_auto_device():
 
     default_list_idx = next((i for i, d in enumerate(devices_list) if d == sd.default.device[0]), 0)
 
-    # Non-interactive mode (e.g. systemd service): use default automatically
+    # Non-interactive mode (systemd service ODER Auto-Restart mit -d): keine
+    # Rückfrage — automatisch das Default-Gerät nehmen.
     import sys
-    if not sys.stdin.isatty():
+    if not interactive or not sys.stdin.isatty():
         choice_idx = default_list_idx
         device_index = devices_list[choice_idx]
         output_device_index = devices_list[choice_idx]
@@ -632,7 +633,7 @@ Beispiele:
     try:
         if auto_device:
             # Auto mode: select ONE device for input + output
-            select_auto_device()
+            select_auto_device(interactive=interactive)
         else:
             # Normal mode: select input and output separately
             select_audio_device(interactive=interactive)

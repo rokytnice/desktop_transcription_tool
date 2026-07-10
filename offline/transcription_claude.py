@@ -232,7 +232,7 @@ def main():
 
     try:
         if args.auto:
-            base.select_auto_device()
+            base.select_auto_device(interactive=interactive)
         else:
             base.select_audio_device(interactive=interactive)
             try:

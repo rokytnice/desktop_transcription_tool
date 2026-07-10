@@ -24,6 +24,7 @@
 #   STREAM_MIN_SILENCE    Pausenlänge in s bis Phrase getippt wird (Standard: 0.7)
 #   STREAM_MIN_PHRASE     Minimale Phrasenlänge in s              (Standard: 0.4)
 #   STREAM_MAX_PHRASE     Max. Phrasenlänge in s ohne Pause       (Standard: 15.0)
+#   STREAM_IDLE_TIMEOUT   Leerlauf in s bis Auto-Stop, 0 = aus    (Standard: 10.0)
 #   STREAM_KBLAYOUT       Tastaturlayout für ydotool (de|us, sonst Auto-Erkennung)
 #
 # BEDIENUNG
@@ -62,7 +63,7 @@ while true; do
     if [ $EXIT_CODE -eq 75 ]; then
         # Eingabegerät verloren → nicht-interaktiv mit Default-Geräten neu starten
         case " ${RUN_ARGS[*]} " in
-            *" -a "*|*" --auto "*|*" -d "*|*" --default "*) : ;;
+            *" -d "*|*" --default "*) : ;;
             *) RUN_ARGS+=("-d") ;;
         esac
         export AUDIO_DEVICE=${AUDIO_DEVICE:-0}

@@ -11,6 +11,7 @@
 #   stream     Wortweise live beim Sprechen (faster-whisper)
 #   vad        Streaming an jeder Sprechpause (Voice Activity Detection)  [Standard]
 #   claude     Sprache → Claude Code → Antwort im Fenster
+#   duplex     Mikro + Lautsprecher dauerhaft mithören → Claude → Fenster
 #
 # OPTIONEN (werden an das jeweilige run_*.sh durchgereicht)
 #   (kein Flag)   -a: ein Gerät für Input+Output (z.B. Jabra-Headset)
@@ -36,7 +37,7 @@ REPO="$(cd "$(dirname "$0")" && pwd)"
 # ── Modus bestimmen ──────────────────────────────────────────────────────────
 MODE=""
 case "${1:-}" in
-    offline|stream|vad|claude) MODE="$1"; shift ;;
+    offline|stream|vad|claude|duplex) MODE="$1"; shift ;;
 esac
 
 if [[ -z "$MODE" ]]; then
@@ -47,13 +48,15 @@ if [[ -z "$MODE" ]]; then
     echo "│  2) stream    wortweise live                  │"
     echo "│  3) vad       an Sprechpausen  (Standard)     │"
     echo "│  4) claude    Sprache → Claude Code           │"
+    echo "│  5) duplex    Mikro + Speaker → Claude        │"
     echo "╰─────────────────────────────────────────────╯"
-    read -rp "Auswahl [1-4, Enter=3]: " choice
+    read -rp "Auswahl [1-5, Enter=3]: " choice
     case "${choice:-3}" in
         1) MODE="offline" ;;
         2) MODE="stream" ;;
         3|"") MODE="vad" ;;
         4) MODE="claude" ;;
+        5) MODE="duplex" ;;
         *) echo "✗ Ungültige Auswahl: $choice"; exit 1 ;;
     esac
 fi
@@ -63,6 +66,7 @@ case "$MODE" in
     stream)  SCRIPT="run_faster_streaming.sh" ;;
     vad)     SCRIPT="run_streaming.sh" ;;
     claude)  SCRIPT="run_claude.sh" ;;
+    duplex)  SCRIPT="run_duplex_claude.sh" ;;
 esac
 
 # ── Laufenden Service stoppen (sonst doppeltes Tippen) ───────────────────────
@@ -82,10 +86,14 @@ for unit in "$HOME"/.config/systemd/user/transcription-*.service; do
 done
 
 # ── Geräteauswahl: ohne Flag standardmäßig -a, --menu überspringt das ────────
-if [[ $# -eq 0 ]]; then
-    set -- -a
-elif [[ "${1:-}" == "--menu" ]]; then
-    shift
+# Ausnahme duplex: nutzt parec-Quellen (Mikro + Speaker-Monitor) statt der
+# sounddevice-Geräteauswahl → kein -a, Argumente unverändert durchreichen.
+if [[ "$MODE" != "duplex" ]]; then
+    if [[ $# -eq 0 ]]; then
+        set -- -a
+    elif [[ "${1:-}" == "--menu" ]]; then
+        shift
+    fi
 fi
 
 echo "→ Modus: $MODE  ($SCRIPT)"

@@ -56,6 +56,7 @@ SILENCE_RMS = float(os.environ.get('STREAM_SILENCE_RMS', '0.010'))   # below = s
 MIN_SILENCE = float(os.environ.get('STREAM_MIN_SILENCE', '0.7'))     # s pause to end phrase
 MIN_PHRASE = float(os.environ.get('STREAM_MIN_PHRASE', '0.4'))       # s min phrase to transcribe
 MAX_PHRASE = float(os.environ.get('STREAM_MAX_PHRASE', '15.0'))      # s force-flush long phrase
+IDLE_TIMEOUT = float(os.environ.get('STREAM_IDLE_TIMEOUT', '10.0'))  # s of silence → auto-stop (0 = off)
 
 # Logger
 logger = logging.getLogger()
@@ -410,7 +411,7 @@ def select_output_device(interactive=False):
             print("Invalid selection!")
 
 
-def select_auto_device():
+def select_auto_device(interactive=False):
     """Select ONE device for both input and output."""
     global device_index, output_device_index
 
@@ -425,8 +426,9 @@ def select_auto_device():
 
     default_list_idx = next((i for i, d in enumerate(devices_list) if d == sd.default.device[0]), 0)
 
-    # Non-interactive mode (e.g. systemd service): use default automatically
-    if not sys.stdin.isatty():
+    # Non-interactive mode (systemd service ODER Auto-Restart mit -d): keine
+    # Rückfrage — automatisch das Default-Gerät nehmen.
+    if not interactive or not sys.stdin.isatty():
         choice_idx = default_list_idx
         device_index = devices_list[choice_idx]
         output_device_index = devices_list[choice_idx]
@@ -542,6 +544,9 @@ class StreamingTranscriber:
         self.stream = None
         self.worker = None
         self.block_dur = BLOCKSIZE / samplerate
+        # Auto-Stop (Leerlauf) und Alt+Alt können gleichzeitig start/stop
+        # aufrufen → serialisieren, sonst doppelter Beep / halb geschlossener Stream.
+        self._lifecycle_lock = threading.Lock()
 
     def _audio_callback(self, indata, frames, time_info, status):
         if status:
@@ -567,6 +572,7 @@ class StreamingTranscriber:
         seg = []
         seg_samples = 0
         silence_run = 0.0
+        idle_run = 0.0      # unbroken silence since the last voiced block
         in_speech = False
 
         while self.active or not self.q.empty():
@@ -582,74 +588,90 @@ class StreamingTranscriber:
                 seg.append(block)
                 seg_samples += len(block)
                 silence_run = 0.0
+                idle_run = 0.0
             elif in_speech:
                 # trailing silence — keep it in the buffer, count the pause
                 seg.append(block)
                 seg_samples += len(block)
                 silence_run += self.block_dur
+                idle_run += self.block_dur
                 if silence_run >= MIN_SILENCE:
                     self._flush(seg, seg_samples)
                     seg, seg_samples, silence_run, in_speech = [], 0, 0.0, False
-            # else: leading silence before any speech → drop
+            else:
+                # leading silence before any speech → drop, but it counts as idle
+                idle_run += self.block_dur
 
             # force-flush very long phrases (no pause yet)
             if seg_samples >= MAX_PHRASE * samplerate:
                 self._flush(seg, seg_samples)
                 seg, seg_samples, silence_run, in_speech = [], 0, 0.0, False
 
+            # Leerlauf: nach IDLE_TIMEOUT ohne Sprache automatisch stoppen.
+            # stop() joint diesen Thread → darf NICHT von hier aus laufen,
+            # sonst Selbst-Join-Deadlock. Deshalb in eigenem Thread.
+            if IDLE_TIMEOUT > 0 and self.active and idle_run >= IDLE_TIMEOUT:
+                logger.info(f"Idle {idle_run:.1f}s ≥ {IDLE_TIMEOUT}s — auto-stop")
+                print(f"\n💤 {IDLE_TIMEOUT:.0f}s Leerlauf — Streaming automatisch gestoppt.")
+                threading.Thread(target=self.stop, daemon=True).start()
+                idle_run = 0.0
+
         # final flush when streaming stops
         if seg_samples > 0:
             self._flush(seg, seg_samples)
 
     def start(self):
-        if self.active:
-            return
-        self.active = True
-        # drain any stale blocks
-        while not self.q.empty():
-            try:
-                self.q.get_nowait()
-            except queue.Empty:
-                break
+        with self._lifecycle_lock:
+            if self.active:
+                return
+            self.active = True
+            # drain any stale blocks
+            while not self.q.empty():
+                try:
+                    self.q.get_nowait()
+                except queue.Empty:
+                    break
 
-        play_beep(START_BEEP_PATH)
-        print("\n>>> 🔴 STREAMING GESTARTET <<<")
-        print("🎤 Sprechen Sie — Text erscheint live am Cursor. Alt+Alt zum Stoppen.\n")
-        logger.info("Streaming started")
+            play_beep(START_BEEP_PATH)
+            print("\n>>> 🔴 STREAMING GESTARTET <<<")
+            hint = f" Nach {IDLE_TIMEOUT:.0f}s Stille stoppt es von selbst." if IDLE_TIMEOUT > 0 else ""
+            print(f"🎤 Sprechen Sie — Text erscheint live am Cursor. Alt+Alt zum Stoppen.{hint}\n")
+            logger.info("Streaming started")
 
-        self.worker = threading.Thread(target=self._worker, daemon=True)
-        self.worker.start()
+            self.worker = threading.Thread(target=self._worker, daemon=True)
+            self.worker.start()
 
-        self.stream = sd.InputStream(
-            device=device_index,
-            channels=1,
-            samplerate=samplerate,
-            dtype='float32',
-            blocksize=BLOCKSIZE,
-            callback=self._audio_callback,
-        )
-        self.stream.start()
+            self.stream = sd.InputStream(
+                device=device_index,
+                channels=1,
+                samplerate=samplerate,
+                dtype='float32',
+                blocksize=BLOCKSIZE,
+                callback=self._audio_callback,
+            )
+            self.stream.start()
 
     def stop(self):
-        if not self.active:
-            return
-        print("\n>>> ⏹️  STREAMING GESTOPPT <<<\n")
-        logger.info("Streaming stopped")
-        self.active = False  # tells worker to drain & finish
+        with self._lifecycle_lock:
+            if not self.active:
+                return
+            print("\n>>> ⏹️  STREAMING GESTOPPT <<<\n")
+            logger.info("Streaming stopped")
+            self.active = False  # tells worker to drain & finish
 
-        if self.stream:
-            try:
-                self.stream.stop()
-                self.stream.close()
-            except Exception as e:
-                logger.warning(f"Error closing stream: {e}")
-            self.stream = None
+            if self.stream:
+                try:
+                    self.stream.stop()
+                    self.stream.close()
+                except Exception as e:
+                    logger.warning(f"Error closing stream: {e}")
+                self.stream = None
 
-        if self.worker:
-            self.worker.join(timeout=30)
-            self.worker = None
+            if self.worker:
+                self.worker.join(timeout=30)
+                self.worker = None
 
-        play_beep(STOP_BEEP_PATH)
+            play_beep(STOP_BEEP_PATH)
 
 
 # ─────────────────────── Keyboard handling ───────────────────────
@@ -775,6 +797,7 @@ if __name__ == "__main__":
 Bedienung:
   Alt+Alt          Streaming starten
   Alt+Alt          Streaming stoppen
+  (automatisch)    Streaming stoppt nach STREAM_IDLE_TIMEOUT s ohne Sprache
   Ctrl+C           Programm beenden
 
 Funktionsweise:
@@ -790,6 +813,7 @@ Umgebungsvariablen:
   STREAM_MIN_SILENCE    Pausenlänge in s zum Phrasen-Ende (Standard: 0.7)
   STREAM_MIN_PHRASE     Minimale Phrasenlänge in s (Standard: 0.4)
   STREAM_MAX_PHRASE     Max. Phrasenlänge in s ohne Pause (Standard: 15.0)
+  STREAM_IDLE_TIMEOUT   Leerlauf in s bis Auto-Stop, 0 = aus (Standard: 10.0)
 
 Beispiele:
   ./run_streaming.sh                   Interaktive Geräteauswahl
@@ -822,7 +846,7 @@ Beispiele:
 
     try:
         if args.auto:
-            select_auto_device()
+            select_auto_device(interactive=interactive)
         else:
             select_audio_device(interactive=interactive)
             try:
@@ -848,7 +872,8 @@ Beispiele:
     print(f"🎤 AUDIO DEVICE: #{device_index} - {device_info['name']}")
     print(f"   Sample Rate: {samplerate} Hz (Streaming)")
     print(f"   Tippen am Cursor: {TYPER}")
-    print(f"   VAD: Pause {MIN_SILENCE}s | Modell {os.environ.get('WHISPER_MODEL', 'small')}")
+    idle_txt = f"{IDLE_TIMEOUT:.0f}s Auto-Stop" if IDLE_TIMEOUT > 0 else "Auto-Stop aus"
+    print(f"   VAD: Pause {MIN_SILENCE}s | Leerlauf: {idle_txt} | Modell {os.environ.get('WHISPER_MODEL', 'small')}")
     print("=" * 60)
 
     try:

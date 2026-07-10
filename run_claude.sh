@@ -59,7 +59,7 @@ while true; do
     if [ $EXIT_CODE -eq 75 ]; then
         # Eingabegerät verloren → nicht-interaktiv mit Default-Geräten neu starten
         case " ${RUN_ARGS[*]} " in
-            *" -a "*|*" --auto "*|*" -d "*|*" --default "*) : ;;
+            *" -d "*|*" --default "*) : ;;
             *) RUN_ARGS+=("-d") ;;
         esac
         export AUDIO_DEVICE=${AUDIO_DEVICE:-0}

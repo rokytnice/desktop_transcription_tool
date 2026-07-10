@@ -1,6 +1,6 @@
 # Desktop Transcription Tool 🎤
 
-Offline-Spracherkennung mit Whisper. Vier Modi:
+Offline-Spracherkennung mit Whisper. Fünf Modi:
 
 - **Klassisch** (`run_offline.sh`) — aufnehmen → stoppen → Text wird **direkt an der
   Cursor-Position getippt** (ydotool, kein Ctrl+V mehr nötig).
@@ -12,6 +12,14 @@ Offline-Spracherkennung mit Whisper. Vier Modi:
   an den Cursor, sondern als Prompt an die Claude-Code-CLI; Claudes Antwort erscheint
   live in einem eigenen Fenster. Über eine feste Session bleibt der Gesprächskontext
   über mehrere Sprach-Eingaben hinweg erhalten.
+- **Duplex → Claude Code** (`run_duplex_claude.sh`) — hört **kontinuierlich** Mikrofon
+  🎤 **und** Lautsprecher-Ausgang 🔊 (via PipeWire-Monitor) gleichzeitig mit und
+  segmentiert **zweistufig**: eine **Mikro-Pause** (~0.35 s) schneidet einen Chunk,
+  der sofort transkribiert und **live als Stream** ins Fenster geschrieben wird; eine
+  **längere Pause** (~1.1 s) beendet den Turn und schickt den gesammelten Text
+  serialisiert an dieselbe Claude-Session. Die Antwort erscheint live im Hauptfenster.
+  Kein Alt+Alt, kein Tippen am Cursor. Tuning per `DUPLEX_MICRO_SILENCE` /
+  `DUPLEX_TURN_SILENCE`.
 
 ## 📁 Projektstruktur
 
@@ -22,6 +30,7 @@ desktop_transcription_tool/
 │   ├── transcription_streaming.py Streaming an Sprechpausen (VAD)
 │   ├── transcription_faster_streaming.py  Wortweises Live-Streaming (faster-whisper)
 │   ├── transcription_claude.py    Sprich mit Claude Code (Sprache → claude -p → Fenster)
+│   ├── transcription_duplex_claude.py  Duplex: Mikro + Speaker-Monitor → claude -p → Fenster
 │   ├── _singleinstance.py         Single-Instance-Sperre (nur EINE Instanz tippt)
 │   ├── install.sh                 Offline-spezifische Installation
 │   ├── requirements.txt
@@ -40,7 +49,8 @@ desktop_transcription_tool/
 ├── run_offline.sh                 Klassisch starten (mit Auto-Restart)
 ├── run_streaming.sh               Streaming an Sprechpausen (mit Auto-Restart)
 ├── run_faster_streaming.sh        Wortweises Live-Streaming (mit Auto-Restart)
-└── run_claude.sh                  Sprich mit Claude Code (mit Auto-Restart)
+├── run_claude.sh                  Sprich mit Claude Code (mit Auto-Restart)
+└── run_duplex_claude.sh           Duplex: Mikro + Speaker → Claude (mit Auto-Restart)
 ```
 
 ---
@@ -85,6 +95,7 @@ transcription claude       # Sprache → Claude Code → Antwort im Fenster
 | `stream` | Text erscheint **wortweise WÄHREND** du sprichst | `run_faster_streaming.sh` |
 | `vad` *(Standard)* | Text erscheint **an jeder Sprechpause** (ganze Phrase) | `run_streaming.sh` |
 | `claude` | gesprochener Text → `claude -p` → Antwort im Fenster | `run_claude.sh` |
+| `duplex` | Mikro **+** Lautsprecher dauerhaft mithören → `claude -p` → Fenster | `run_duplex_claude.sh` |
 
 **Optionen** (für alle Modi, werden an das jeweilige `run_*.sh` durchgereicht):
 
@@ -113,7 +124,7 @@ Wenn du dir keine Modusnamen merken willst: `start.sh` im Projektordner zeigt ei
 (braucht das globale `transcription`-Kommando nicht).
 
 ```bash
-./start.sh              # Menü: 1) offline  2) stream  3) vad (Standard)  4) claude
+./start.sh              # Menü: 1) offline  2) stream  3) vad (Standard)  4) claude  5) duplex
 ./start.sh offline      # oder direkt einen Modus angeben
 ./start.sh vad --menu   # mit interaktiver Geräteauswahl
 ```
@@ -180,6 +191,7 @@ UMGEBUNGSVARIABLEN
   STREAM_MIN_SILENCE    Pausenlänge in s bis Phrase getippt wird  (Standard: 0.7)
   STREAM_MIN_PHRASE     Minimale Phrasenlänge in s                (Standard: 0.4)
   STREAM_MAX_PHRASE     Max. Phrasenlänge in s ohne Pause         (Standard: 15.0)
+  STREAM_IDLE_TIMEOUT   Leerlauf in s bis Auto-Stop, 0 = aus      (Standard: 10.0)
 
 BEISPIELE
   ./run_streaming.sh                      Interaktive Geräteauswahl
@@ -189,6 +201,10 @@ BEISPIELE
 
 **Bedienung:** Alt+Alt startet/stoppt das Streaming, dann einfach sprechen — der Text
 erscheint an jeder Sprechpause direkt im fokussierten Fenster.
+
+**Leerlauf-Timeout:** Wird 10 s lang nichts gesprochen, stoppt das Streaming
+automatisch (Stop-Beep) — kein versehentlich offenes Mikrofon. Anpassen per
+`STREAM_IDLE_TIMEOUT` (Sekunden, `0` schaltet die Abschaltung ab).
 
 ### Live-Tippen am Cursor — Backends
 
@@ -309,6 +325,59 @@ BEISPIELE
 > **Hinweis (Wayland):** Das Fenster nutzt Tkinter und braucht XWayland (`DISPLAY`,
 > meist `:0`). Als Service setzt `setup-service.sh claude` die `DISPLAY`-Variable
 > automatisch.
+
+---
+
+## 🎧 run_duplex_claude.sh (Duplex: Mikro + Speaker → Claude)
+
+Hört **kontinuierlich und gleichzeitig** zwei Audioquellen mit und schickt jede
+erkannte Phrase an dieselbe Claude-Session:
+
+- 🎤 **Mikrofon** — die Default-Aufnahmequelle (`@DEFAULT_SOURCE@`)
+- 🔊 **Lautsprecher** — der PipeWire-/PulseAudio-**Monitor** des Default-Ausgabegeräts
+  (`<sink>.monitor`), also alles, was aus den Boxen kommt (Videocall-Gegenüber,
+  Video, Podcast …)
+
+Beide Ströme werden über `parec` als 16-kHz-Float32-Mono gelesen und mit derselben
+VAD-Logik wie der `vad`-Modus an Sprechpausen segmentiert. Jede fertige Phrase geht
+**serialisiert** (nie zwei `claude`-Aufrufe gleichzeitig) durch eine feste Session
+(`--session-id` / `--resume`) → der Gesprächskontext bleibt erhalten. Claudes Antwort
+wird live ins Hauptfenster gestreamt. Kein Alt+Alt, kein Tippen am Cursor — das Tool
+läuft von allein.
+
+```
+VERWENDUNG
+  ./run_duplex_claude.sh [OPTIONEN]
+
+OPTIONEN
+  (kein Flag)   Mikrofon + Lautsprecher mithören
+  --no-mic      nur Lautsprecher (Speaker-Monitor)
+  --no-speaker  nur Mikrofon
+  -h, --help    Hilfe anzeigen
+
+UMGEBUNGSVARIABLEN
+  WHISPER_MODEL, STREAM_SILENCE_RMS, STREAM_MIN_SILENCE, STREAM_MIN_PHRASE,
+  STREAM_MAX_PHRASE   — VAD/Whisper wie im vad-Modus
+  CLAUDE_CWD, CLAUDE_MODEL, CLAUDE_PERMISSION_MODE   — wie run_claude.sh
+  MIC_SOURCE          parec-Quelle Mikro (Standard: @DEFAULT_SOURCE@)
+  SPEAKER_SOURCE      parec-Quelle Monitor (Standard: <default-sink>.monitor)
+
+BEISPIELE
+  ./run_duplex_claude.sh                 Mikro + Speaker
+  ./run_duplex_claude.sh --no-mic        nur das Gegenüber im Call → Claude
+  CLAUDE_MODEL=opus ./run_duplex_claude.sh
+```
+
+> **Voraussetzung:** `claude`-CLI eingeloggt **und** `parec` (Paket
+> `pulseaudio-utils`) installiert. Der Speaker-Mitschnitt läuft über den
+> PipeWire-Monitor — auf reinem PulseAudio funktioniert `parec` identisch.
+>
+> **Echo-Hinweis:** Bei offenen Lautsprechern nimmt das Mikro auch den Speaker-Ton
+> auf → Phrasen können doppelt ankommen (Mikro **und** Monitor). Für saubere
+> Trennung Kopfhörer nutzen oder eine Quelle mit `--no-mic` / `--no-speaker`
+> abschalten.
+>
+> **Wayland:** wie `run_claude.sh` braucht das Tkinter-Fenster XWayland (`DISPLAY`).
 
 ---
 
