@@ -289,17 +289,26 @@ def select_audio_device(interactive=False):
             print("Invalid selection!")
 
 # Keyboard device detection
-def find_keyboard_devices():
+def find_keyboard_devices(log=True):
     devices = []
     for path in list_devices():
-        device = InputDevice(path)
+        try:
+            device = InputDevice(path)
+        except OSError:
+            # Gerät verschwand zwischen list_devices() und open() (Hotplug-Race)
+            continue
         if ecodes.EV_KEY in device.capabilities():
             if 'keyboard' in device.name.lower() or 'key' in device.name.lower() or 'at translated' in device.name.lower():
                 devices.append(device)
-                logger.info(f"Found keyboard device: {device.path} - {device.name}")
-                print(f"  ✓ {device.path} - {device.name}")
+                if log:
+                    logger.info(f"Found keyboard device: {device.path} - {device.name}")
+                    print(f"  ✓ {device.path} - {device.name}")
+            else:
+                device.close()
+        else:
+            device.close()
 
-    if not devices:
+    if not devices and log:
         raise RuntimeError("No keyboard devices found!")
 
     return devices
@@ -455,41 +464,81 @@ _restart_requested = False
 # Default-Einstellungen (nicht-interaktiv) neu starten" interpretieren.
 RESTART_EXIT_CODE = 75
 
+# Wie lange (Sekunden) ohne EINE einzige Tastatur gewartet wird, bevor als
+# letzter Ausweg ein kompletter Neustart (exit 75) ausgelöst wird. Solange noch
+# mindestens ein Keyboard überwacht wird, wird NIE neu gestartet — verlorene
+# Geräte werden entfernt, wiederkehrende/neue per Hotplug automatisch aufgenommen.
+NO_KEYBOARD_GRACE_S = 30
+# Takt der Hotplug-/Liveness-Prüfung.
+RESCAN_INTERVAL_S = 3
+
 def process_keyboard_events(devices):
-    global _shutdown_requested
+    global _shutdown_requested, _restart_requested, recording
 
-    def start_threads(devs):
-        threads = []
-        for device in devs:
-            t = threading.Thread(target=monitor_device, args=(device,), daemon=True)
-            t.start()
-            threads.append(t)
-        return threads
+    # path -> (InputDevice, Thread)
+    active = {}
+    for device in devices:
+        t = threading.Thread(target=monitor_device, args=(device,), daemon=True)
+        t.start()
+        active[device.path] = (device, t)
 
-    threads = start_threads(devices)
+    empty_since = None  # monotonic-Zeitpunkt, seit dem KEINE Tastatur mehr da ist
 
-    global recording
     try:
         while not _shutdown_requested:
-            time.sleep(5)
-            device_lost = _restart_requested or not any(t.is_alive() for t in threads)
-            if not _shutdown_requested and device_lost:
-                logger.warning(
-                    "Keyboard device lost — exiting to restart with default settings "
-                    f"(exit {RESTART_EXIT_CODE})."
-                )
-                print("\n🔁 Eingabegerät verloren — Neustart mit Default-Einstellungen...")
-                if recording:
+            time.sleep(RESCAN_INTERVAL_S)
+            if _shutdown_requested:
+                break
+
+            # 1) Verlorene Geräte (Thread beendet via OSError) entfernen ────────
+            for path in list(active.keys()):
+                dev, t = active[path]
+                if not t.is_alive():
+                    logger.warning(f"Tastatur verschwunden: {path} — entfernt, warte auf Wiederkehr")
                     try:
-                        stop_recording()
+                        dev.close()
                     except Exception:
                         pass
-                for device in devices:
+                    del active[path]
+            _restart_requested = False  # Signal verbraucht — kein harter Restart mehr
+
+            # 2) Neu aufgetauchte / wiederverbundene Tastaturen aufnehmen ───────
+            try:
+                current = find_keyboard_devices(log=False)
+            except Exception:
+                current = []
+            for dev in current:
+                if dev.path in active:
                     try:
-                        device.close()
+                        dev.close()  # bereits überwacht — Duplikat schließen
                     except Exception:
                         pass
-                os._exit(RESTART_EXIT_CODE)
+                    continue
+                t = threading.Thread(target=monitor_device, args=(dev,), daemon=True)
+                t.start()
+                active[dev.path] = (dev, t)
+                logger.info(f"Neue Tastatur erkannt — überwache jetzt: {dev.path} - {dev.name}")
+                print(f"  ✓ (hotplug) {dev.path} - {dev.name}")
+
+            # 3) Total-Verlust: erst nach Grace-Periode neu starten ─────────────
+            if not active:
+                if empty_since is None:
+                    empty_since = time.monotonic()
+                    logger.warning("Keine Tastatur mehr aktiv — warte auf Wiederkehr...")
+                elif time.monotonic() - empty_since > NO_KEYBOARD_GRACE_S:
+                    logger.warning(
+                        f"Keine Tastatur nach {NO_KEYBOARD_GRACE_S}s zurück — Neustart mit "
+                        f"Default-Einstellungen (exit {RESTART_EXIT_CODE})."
+                    )
+                    print("\n🔁 Eingabegerät verloren — Neustart mit Default-Einstellungen...")
+                    if recording:
+                        try:
+                            stop_recording()
+                        except Exception:
+                            pass
+                    os._exit(RESTART_EXIT_CODE)
+            else:
+                empty_since = None
     except KeyboardInterrupt:
         pass
 
@@ -502,9 +551,9 @@ def process_keyboard_events(devices):
         except Exception:
             pass
     # Close all input devices
-    for device in devices:
+    for dev, _t in list(active.values()):
         try:
-            device.close()
+            dev.close()
         except Exception:
             pass
     print("✓ Goodbye!")

@@ -87,6 +87,36 @@ Auto-Restart-Verhalten der `run_*.sh`). Wer bewusst ein Gerät wählen will,
 nutzt `./start.sh <modus> --menu`. Betrifft alle nicht-Duplex-Modi (offline,
 stream, vad, claude), die dieselbe `-a`-ohne-`-d`-TTY-Falle teilten.
 
+## Alt+Alt reagiert nicht — Tastatur nach kurzem Verbindungsverlust „unsichtbar"
+
+**Symptom:** Der Service läuft (`active`), das Log endet sauber bei
+`Monitoring device: …` — aber Alt+Alt löst nichts aus, im Log erscheint **kein**
+neuer `Alt press`. Betrifft besonders **Funk-/Bluetooth-Tastaturen** (z. B.
+`BT+2.4G KB Keyboard`, `Compx 2.4G Receiver`).
+
+**Ursache:** Früher galt: geht *ein* überwachtes Keyboard verloren (OSError im
+`read_loop`), beendet sich der Prozess mit **exit 75**, und der Wrapper/systemd
+startet neu. Kommt eine Funk-Tastatur nach einem kurzen Dropout unter einer neuen
+oder wieder erscheinenden `eventNN`-Nummer zurück, war sie beim Geräte-Scan des
+Neustarts aber oft **noch nicht** da → der frische Prozess überwacht sie nicht.
+Ergebnis: alle anderen Tastaturen funktionieren, ausgerechnet die benutzte nicht.
+Diagnose:
+```bash
+# Was überwacht der Prozess?
+grep "Monitoring device" ~/.transcription/transcription_listener.log | tail
+# Welche Tastaturen gibt es JETZT wirklich?
+awk '/^N: Name=/{n=$0} /H: Handlers=.*kbd/{print n" -> "$0}' /proc/bus/input/devices
+# eventNN aus der 2. Liste fehlt in der 1.? → genau dieser Bug.
+```
+
+**Fix (transcription_offline.py):** `process_keyboard_events()` macht jetzt
+**Hotplug**: alle 3 s (`RESCAN_INTERVAL_S`) werden tote Monitor-Threads
+(= verlorene Geräte) entfernt **und** neu aufgetauchte/wiederverbundene Tastaturen
+per `find_keyboard_devices(log=False)` automatisch dazugenommen — **ohne**
+Neustart. Ein harter Neustart (exit 75) passiert nur noch als letzter Ausweg,
+wenn **gar keine** Tastatur mehr da ist und auch nach `NO_KEYBOARD_GRACE_S` (30 s)
+keine zurückkommt. So heilt ein kurzer Funk-Dropout von selbst.
+
 ## Beim Stoppen geht der letzte Satzrest verloren (faster-streaming)
 
 **Symptom:** Beim Stoppen (Alt+Alt) fehlten die zuletzt gesprochenen Wörter.
