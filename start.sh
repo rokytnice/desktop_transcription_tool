@@ -70,6 +70,8 @@ case "$MODE" in
 esac
 
 # ── Laufenden Service stoppen (sonst doppeltes Tippen) ───────────────────────
+# Gestoppte Units merken → beim Beenden des manuellen Runs wieder hochfahren.
+STOPPED_UNITS=()
 for unit in "$HOME"/.config/systemd/user/transcription-*.service; do
     [[ -e "$unit" ]] || continue
     name="$(basename "$unit")"
@@ -81,20 +83,40 @@ for unit in "$HOME"/.config/systemd/user/transcription-*.service; do
         active|activating|reloading|deactivating)
             echo "→ stoppe laufenden Service: $name ($state)"
             systemctl --user stop "$name"
+            STOPPED_UNITS+=("$name")
             ;;
     esac
 done
 
-# ── Geräteauswahl: ohne Flag standardmäßig -a, --menu überspringt das ────────
+# Beim Verlassen (normal ODER Ctrl+C) die zuvor gestoppten Services wieder
+# starten — so kehrt der Hintergrund-Betrieb nach einem manuellen Run zurück.
+restart_services() {
+    local u
+    (( ${#STOPPED_UNITS[@]} == 0 )) && return
+    for u in "${STOPPED_UNITS[@]}"; do
+        echo "↻ starte Service wieder: $u"
+        systemctl --user start "$u"
+    done
+}
+trap restart_services EXIT
+
+# ── Geräteauswahl: ohne Flag Schnellstart (-a -d), --menu überspringt das ────
+# Wichtig: -a ALLEIN öffnet in einem Terminal (TTY) das interaktive
+# Geräteauswahl-Menü und blockiert bei input() — der Keyboard-Listener startet
+# dann nie, Alt+Alt bleibt wirkungslos. Deshalb den Default-Pfad nicht-interaktiv
+# machen (-a -d = ein Default-Gerät für Input+Output, kein Menü; identisch zum
+# Auto-Restart-Verhalten der run_*.sh). Wer bewusst wählen will: --menu.
 # Ausnahme duplex: nutzt parec-Quellen (Mikro + Speaker-Monitor) statt der
 # sounddevice-Geräteauswahl → kein -a, Argumente unverändert durchreichen.
 if [[ "$MODE" != "duplex" ]]; then
     if [[ $# -eq 0 ]]; then
-        set -- -a
+        set -- -a -d
     elif [[ "${1:-}" == "--menu" ]]; then
         shift
     fi
 fi
 
 echo "→ Modus: $MODE  ($SCRIPT)"
-exec "$REPO/$SCRIPT" "$@"
+# Kein exec mehr: der manuelle Run läuft als Kind-Prozess, damit nach seinem
+# Ende (auch Ctrl+C) der EXIT-Trap greift und die Services wieder hochfährt.
+"$REPO/$SCRIPT" "$@"

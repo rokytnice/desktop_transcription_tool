@@ -1,6 +1,6 @@
 # Troubleshooting
 
-_Zuletzt aktualisiert: 2026-06-24_
+_Zuletzt aktualisiert: 2026-07-11_
 
 ## ydotool tippt Z als Y / falsche Umlaute (deutsches Layout)
 
@@ -57,6 +57,35 @@ sauber ab (Exit 0) und nennt die PID des Halters. Der `flock` wird vom OS beim
 Prozess-Ende automatisch freigegeben (auch bei Crash/kill) — keine
 verwaisten Lockfiles. **Manuell testen statt Service?** Erst `transcription-stop`,
 dann `./run_*.sh`.
+
+## Start über `start.sh` im Terminal „hängt" — Alt+Alt tut nichts
+
+**Symptom:** Man startet einen Modus über `./start.sh` (z. B. offline) in einem
+Terminal. Das Log endet bei `Whisper small model loaded` — **keine** Zeilen
+`Auto-selected device` / `Monitoring device` folgen. Alt+Alt löst nichts aus.
+Als Service (Autostart) läuft derselbe Modus dagegen einwandfrei.
+
+**Ursache:** `start.sh` reichte für den Schnellstart bloß `-a` durch. `-a`
+**allein** bedeutet in der Python-Logik `interactive=True`; ist stdin ein TTY
+(Terminal!), zeigt `select_auto_device()` ein **Geräteauswahl-Menü** und
+blockiert bei `input()`. Das Menü geht nur nach **stdout**, nicht ins Logfile —
+darum sieht das Log wie ein Hänger nach dem Modell-Load aus. Der
+Keyboard-Listener wird nie gestartet, also bleibt Alt+Alt wirkungslos. Der
+systemd-Service hat **kein** TTY → nimmt den nicht-interaktiven Zweig → läuft.
+(Auch der Auto-Restart nach Device-Verlust hängt `-d` an und ist deshalb ok.)
+
+**Diagnose:**
+```bash
+# Prozess da, aber Log endet bei "Whisper ... loaded"?
+tail /home/aroc/.transcription/transcription_listener.log
+# Hauptthread in wait_woken (poll/read) + kein "Monitoring device" → wartet auf input()
+```
+
+**Fix (start.sh):** Der Default-Pfad ist jetzt `-a -d` statt nur `-a` — also
+nicht-interaktiv, ein Default-Gerät für Input+Output, kein Menü (identisch zum
+Auto-Restart-Verhalten der `run_*.sh`). Wer bewusst ein Gerät wählen will,
+nutzt `./start.sh <modus> --menu`. Betrifft alle nicht-Duplex-Modi (offline,
+stream, vad, claude), die dieselbe `-a`-ohne-`-d`-TTY-Falle teilten.
 
 ## Beim Stoppen geht der letzte Satzrest verloren (faster-streaming)
 

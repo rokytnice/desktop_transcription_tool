@@ -1,6 +1,6 @@
 # Service & Autostart
 
-_Zuletzt aktualisiert: 2026-06-24_
+_Zuletzt aktualisiert: 2026-07-11_
 
 ## Überblick
 
@@ -30,6 +30,17 @@ Zwei Bausteine zusammen:
 
 `Restart=always` + `RestartSec=10` fangen transiente Fehler ab (z. B. PipeWire
 noch nicht ganz oben).
+
+## `start.sh` und der Service (manueller Run vs. Hintergrund)
+
+`start.sh` **stoppt** beim Start jeden aktiven `transcription-*.service` — sonst
+liefen Service **und** manueller Run gleichzeitig und würden doppelt tippen (der
+Single-Instance-Lock würde den zweiten sofort beenden). Die gestoppten Units
+merkt sich der Launcher in `STOPPED_UNITS` und **startet sie beim Verlassen des
+manuellen Runs wieder** — via `trap restart_services EXIT`, also auch bei Ctrl+C.
+So ist man nach einem kurzen manuellen Test automatisch wieder im
+Hintergrund-Betrieb. Deshalb kein `exec` mehr: der Run läuft als Kind-Prozess,
+damit der EXIT-Trap überhaupt greift.
 
 ## setup-service.sh — was es macht
 
