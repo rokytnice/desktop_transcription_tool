@@ -56,7 +56,7 @@ SILENCE_RMS = float(os.environ.get('STREAM_SILENCE_RMS', '0.010'))   # below = s
 MIN_SILENCE = float(os.environ.get('STREAM_MIN_SILENCE', '0.7'))     # s pause to end phrase
 MIN_PHRASE = float(os.environ.get('STREAM_MIN_PHRASE', '0.4'))       # s min phrase to transcribe
 MAX_PHRASE = float(os.environ.get('STREAM_MAX_PHRASE', '15.0'))      # s force-flush long phrase
-IDLE_TIMEOUT = float(os.environ.get('STREAM_IDLE_TIMEOUT', '10.0'))  # s of silence → auto-stop (0 = off)
+IDLE_TIMEOUT = float(os.environ.get('STREAM_IDLE_TIMEOUT', '15.0'))  # s of silence → auto-stop (0 = off)
 
 # Logger
 logger = logging.getLogger()
@@ -676,17 +676,25 @@ class StreamingTranscriber:
 
 # ─────────────────────── Keyboard handling ───────────────────────
 
-def find_keyboard_devices():
+def find_keyboard_devices(log=True):
     devices = []
     for path in list_devices():
-        device = InputDevice(path)
+        try:
+            device = InputDevice(path)
+        except OSError:
+            continue
         if ecodes.EV_KEY in device.capabilities():
             name = device.name.lower()
             if 'keyboard' in name or 'key' in name or 'at translated' in name:
                 devices.append(device)
-                logger.info(f"Found keyboard device: {device.path} - {device.name}")
-                print(f"  ✓ {device.path} - {device.name}")
-    if not devices:
+                if log:
+                    logger.info(f"Found keyboard device: {device.path} - {device.name}")
+                    print(f"  ✓ {device.path} - {device.name}")
+            else:
+                device.close()
+        else:
+            device.close()
+    if not devices and log:
         raise RuntimeError("No keyboard devices found!")
     return devices
 
@@ -732,38 +740,80 @@ def monitor_device(device):
         logger.error(f"Error monitoring {device.path}: {e}")
 
 
-def process_keyboard_events(devices):
-    def start_threads(devs):
-        ts = []
-        for device in devs:
-            t = threading.Thread(target=monitor_device, args=(device,), daemon=True)
-            t.start()
-            ts.append(t)
-        return ts
+# Wie lange (Sekunden) ohne EINE einzige Tastatur gewartet wird, bevor als
+# letzter Ausweg ein kompletter Neustart (exit 75) ausgelöst wird. Solange noch
+# mindestens ein Keyboard überwacht wird, wird NIE neu gestartet — verlorene
+# Geräte werden entfernt, wiederkehrende/neue per Hotplug automatisch aufgenommen.
+NO_KEYBOARD_GRACE_S = 30
+RESCAN_INTERVAL_S = 3
 
-    threads = start_threads(devices)
+def process_keyboard_events(devices):
+    global _restart_requested
+
+    # path -> (InputDevice, Thread)
+    active = {}
+    for device in devices:
+        t = threading.Thread(target=monitor_device, args=(device,), daemon=True)
+        t.start()
+        active[device.path] = (device, t)
+
+    empty_since = None  # monotonic-Zeitpunkt, seit dem KEINE Tastatur mehr da ist
 
     try:
         while not _shutdown_requested:
-            time.sleep(5)
-            device_lost = _restart_requested or not any(t.is_alive() for t in threads)
-            if not _shutdown_requested and device_lost:
-                logger.warning(
-                    "Keyboard device lost — exiting to restart with default settings "
-                    f"(exit {RESTART_EXIT_CODE})."
-                )
-                print("\n🔁 Eingabegerät verloren — Neustart mit Default-Einstellungen...")
-                if _transcriber.active:
+            time.sleep(RESCAN_INTERVAL_S)
+            if _shutdown_requested:
+                break
+
+            # 1) Verlorene Geräte (Thread beendet via OSError) entfernen ────────
+            for path in list(active.keys()):
+                dev, t = active[path]
+                if not t.is_alive():
+                    logger.warning(f"Tastatur verschwunden: {path} — entfernt, warte auf Wiederkehr")
                     try:
-                        _transcriber.stop()
+                        dev.close()
                     except Exception:
                         pass
-                for device in devices:
+                    del active[path]
+            _restart_requested = False  # Signal verbraucht — kein harter Restart mehr
+
+            # 2) Neu aufgetauchte / wiederverbundene Tastaturen aufnehmen ───────
+            try:
+                current = find_keyboard_devices(log=False)
+            except Exception:
+                current = []
+            for dev in current:
+                if dev.path in active:
                     try:
-                        device.close()
+                        dev.close()  # bereits überwacht — Duplikat schließen
                     except Exception:
                         pass
-                os._exit(RESTART_EXIT_CODE)
+                    continue
+                t = threading.Thread(target=monitor_device, args=(dev,), daemon=True)
+                t.start()
+                active[dev.path] = (dev, t)
+                logger.info(f"Neue Tastatur erkannt — überwache jetzt: {dev.path} - {dev.name}")
+                print(f"  ✓ (hotplug) {dev.path} - {dev.name}")
+
+            # 3) Total-Verlust: erst nach Grace-Periode neu starten ─────────────
+            if not active:
+                if empty_since is None:
+                    empty_since = time.monotonic()
+                    logger.warning("Keine Tastatur mehr aktiv — warte auf Wiederkehr...")
+                elif time.monotonic() - empty_since > NO_KEYBOARD_GRACE_S:
+                    logger.warning(
+                        f"Keine Tastatur nach {NO_KEYBOARD_GRACE_S}s zurück — Neustart mit "
+                        f"Default-Einstellungen (exit {RESTART_EXIT_CODE})."
+                    )
+                    print("\n🔁 Eingabegerät verloren — Neustart mit Default-Einstellungen...")
+                    if _transcriber.active:
+                        try:
+                            _transcriber.stop()
+                        except Exception:
+                            pass
+                    os._exit(RESTART_EXIT_CODE)
+            else:
+                empty_since = None
     except KeyboardInterrupt:
         pass
 
@@ -774,9 +824,9 @@ def process_keyboard_events(devices):
             _transcriber.stop()
         except Exception:
             pass
-    for device in devices:
+    for dev, _t in list(active.values()):
         try:
-            device.close()
+            dev.close()
         except Exception:
             pass
     print("✓ Goodbye!")
@@ -813,7 +863,7 @@ Umgebungsvariablen:
   STREAM_MIN_SILENCE    Pausenlänge in s zum Phrasen-Ende (Standard: 0.7)
   STREAM_MIN_PHRASE     Minimale Phrasenlänge in s (Standard: 0.4)
   STREAM_MAX_PHRASE     Max. Phrasenlänge in s ohne Pause (Standard: 15.0)
-  STREAM_IDLE_TIMEOUT   Leerlauf in s bis Auto-Stop, 0 = aus (Standard: 10.0)
+  STREAM_IDLE_TIMEOUT   Leerlauf in s bis Auto-Stop, 0 = aus (Standard: 15.0)
 
 Beispiele:
   ./run_streaming.sh                   Interaktive Geräteauswahl

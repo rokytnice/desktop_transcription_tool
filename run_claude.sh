@@ -23,9 +23,11 @@
 #   CLAUDE_CWD            Arbeitsverzeichnis für Claude          (Standard: $HOME)
 #   CLAUDE_MODEL          Modell für Claude (z. B. sonnet, opus) (optional)
 #   CLAUDE_PERMISSION_MODE  z. B. plan, acceptEdits              (optional)
+#   RECORD_SILENCE_STOP   Sprechpause in s bis Auto-Stop, 0 = aus (Standard: 15.0)
 #
 # BEDIENUNG
 #   Alt+Alt   Aufnahme starten / stoppen → an Claude übergeben
+#             (stoppt auch automatisch bei Sprechpause > 15s)
 #   Ctrl+C / Fenster schließen   Beenden
 #
 # VORAUSSETZUNG

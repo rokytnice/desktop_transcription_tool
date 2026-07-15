@@ -24,10 +24,12 @@
 #   STREAM_MIN_CHUNK      Update-Takt in s (~2s ≈ 3-5 Wörter pro Schub)  (Standard: 2.0)
 #   STREAM_MAX_BUFFER     Puffer-Obergrenze in s vor Beschnitt         (Standard: 18.0)
 #   STREAM_BEAM           Beam-Size (1 = geringste Latenz)             (Standard: 1)
+#   STREAM_SILENCE_RMS    Schwelle Stille-Erkennung                    (Standard: 0.010)
+#   STREAM_IDLE_TIMEOUT   Leerlauf in s bis Auto-Stop, 0 = aus         (Standard: 15.0)
 #   STREAM_KBLAYOUT       Tastaturlayout für ydotool (de|us, sonst Auto-Erkennung)
 #
 # BEDIENUNG
-#   Alt+Alt   Streaming starten / stoppen
+#   Alt+Alt   Streaming starten / stoppen (stoppt auch automatisch nach 15s Stille)
 #   Ctrl+C    Programm beenden
 #
 # TIPP

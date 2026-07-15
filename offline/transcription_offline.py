@@ -17,6 +17,7 @@ import torch
 import evdev
 from evdev import InputDevice, ecodes, list_devices
 import threading
+import queue
 import argparse
 
 import _typer  # gemeinsames Tipp-Backend (ydotool/wtype/Clipboard)
@@ -37,7 +38,42 @@ log_file_path = os.path.join(TRANSCRIPTION_DIR, "transcription_listener.log")
 audio_data = []
 input_stream = None
 
+# Aufnahme wird nach dieser Dauer automatisch gestoppt und transkribiert —
+# verhindert endlose Aufnahmen, wenn der Stopp-Doppeltipp nicht ankommt.
+MAX_RECORDING_SECONDS = 120
+_max_duration_timer = None
+
+# Sprechpause länger als RECORD_SILENCE_STOP s → Aufnahme automatisch stoppen
+# und transkribieren (0 = aus). Stille-Schwelle wie im Streaming-Modus.
+RECORD_SILENCE_STOP = float(os.environ.get('RECORD_SILENCE_STOP', '15.0'))
+RECORD_SILENCE_RMS = float(os.environ.get('STREAM_SILENCE_RMS', '0.010'))
+_silence_run = 0.0
+_silence_stop_fired = False
+
+# ── Live-Pipelining (OFFLINE_LIVE) ───────────────────────────────────────────
+# Statt am Ende die GANZE Aufnahme zu transkribieren (langes Warten), läuft
+# während der Aufnahme ein Hintergrund-Worker mit: er segmentiert an
+# Sprechpausen (VAD) und transkribiert/tippt jede fertige Phrase SOFORT. Beim
+# Stoppen ist nur noch der letzte kurze Rest offen — kaum Wartezeit. Die volle
+# WAV wird trotzdem wie bisher gespeichert. OFFLINE_LIVE=0 → altes Verhalten
+# (aufnehmen → stoppen → alles am Stück transkribieren).
+_live_mode = os.environ.get('OFFLINE_LIVE', '1') != '0'
+# VAD-/Segment-Tuning (teilt sich die Schwellen mit dem Streaming-Modus).
+LIVE_MIN_SILENCE = float(os.environ.get('STREAM_MIN_SILENCE', '0.7'))  # s Pause → Phrasen-Ende
+LIVE_MIN_PHRASE = float(os.environ.get('STREAM_MIN_PHRASE', '0.4'))    # s min. Phrase zum Transkribieren
+LIVE_MAX_PHRASE = float(os.environ.get('STREAM_MAX_PHRASE', '15.0'))   # s Force-Flush langer Phrase
+_live_q = queue.Queue()   # float32-Blöcke aus dem Audio-Callback an den Live-Worker
+_live_pump = None         # aktueller Live-Worker-Thread
+
+# Serialisiert die Transkriptions-Worker (Whisper ist nicht thread-safe;
+# Reihenfolge der getippten Ausgabe bleibt erhalten).
+_transcribe_lock = threading.Lock()
+
+# Feste 16-kHz-Mono-float32-Aufnahme — Whispers natives Format. PipeWire/
+# PulseAudio resampelt das Gerät transparent; so sind die Live-Segmente ohne
+# Umrechnung direkt whisper-tauglich und die gespeicherte WAV ist sprach-ideal.
 samplerate = 16000
+BLOCKSIZE = 1600  # 0.1-s-Blöcke → feine Auflösung für die Pausenerkennung
 device_index = None  # Input device, selected at startup
 output_device_index = None  # Output device, selected at startup
 
@@ -98,13 +134,18 @@ def play_beep(filepath):
     except Exception as e:
         logger.warning(f"Could not play sound via paplay: {e}")
 
+def play_beep_async(filepath):
+    """Beep im Hintergrund — paplay blockiert sonst bis zu 2s den Aufrufer
+    (Tastatur-Thread!) und die Aufnahme würde verzögert starten/stoppen."""
+    threading.Thread(target=play_beep, args=(filepath,), daemon=True).start()
+
 def play_start_recording_sound():
     """Play sound when recording starts"""
-    play_beep(START_BEEP_PATH)
+    play_beep_async(START_BEEP_PATH)
 
 def play_stop_recording_sound():
     """Play sound when recording stops"""
-    play_beep(STOP_BEEP_PATH)
+    play_beep_async(STOP_BEEP_PATH)
 
 # Audio output device selection
 def select_output_device(interactive=False):
@@ -314,42 +355,109 @@ def find_keyboard_devices(log=True):
     return devices
 
 
-def audio_callback(indata, frames, time, status):
-    """Callback to capture audio data"""
-    global audio_data, recording
+def _on_max_duration_reached():
+    """Auto-Stopp: MAX_RECORDING_SECONDS erreicht → stoppen und transkribieren."""
     if recording:
-        audio_data.append(indata.copy())
+        msg = f"⏱️  Max. Aufnahmedauer ({MAX_RECORDING_SECONDS}s) erreicht — Aufnahme wird gestoppt"
+        logger.info(msg)
+        print(f"\n>>> {msg} <<<\n")
+        stop_recording()
+
+
+def _start_max_duration_timer():
+    global _max_duration_timer
+    _cancel_max_duration_timer()
+    _max_duration_timer = threading.Timer(MAX_RECORDING_SECONDS, _on_max_duration_reached)
+    _max_duration_timer.daemon = True
+    _max_duration_timer.start()
+
+
+def _cancel_max_duration_timer():
+    global _max_duration_timer
+    if _max_duration_timer is not None:
+        _max_duration_timer.cancel()
+        _max_duration_timer = None
+
+
+def _on_silence_stop():
+    """Auto-Stopp: Sprechpause > RECORD_SILENCE_STOP s → stoppen und transkribieren."""
+    if recording:
+        msg = f"💤 Sprechpause > {RECORD_SILENCE_STOP:.0f}s — Aufnahme wird gestoppt"
+        logger.info(msg)
+        print(f"\n>>> {msg} <<<\n")
+        stop_recording()
+
+
+def audio_callback(indata, frames, time, status):
+    """Callback to capture audio data (16 kHz mono float32)."""
+    global audio_data, recording, _silence_run, _silence_stop_fired
+    if recording:
+        # Kanal 0 als 1-D-float32; deckt Mono und (Fallback-)Mehrkanal ab.
+        block = indata[:, 0].copy() if indata.ndim > 1 else indata.copy()
+        audio_data.append(block)
+        # Live-Worker parallel füttern → transkribiert Phrasen schon während der Aufnahme.
+        if _live_mode:
+            _live_q.put(block)
+        if RECORD_SILENCE_STOP > 0 and not _silence_stop_fired:
+            rms = float(np.sqrt(np.mean(block ** 2)))
+            if rms >= RECORD_SILENCE_RMS:
+                _silence_run = 0.0
+            else:
+                _silence_run += frames / float(samplerate)
+                if _silence_run >= RECORD_SILENCE_STOP:
+                    # stop_recording() schließt den Stream → nie direkt aus dem
+                    # PortAudio-Callback aufrufen, sonst Deadlock.
+                    _silence_stop_fired = True
+                    threading.Thread(target=_on_silence_stop, daemon=True).start()
+
+def _start_live_pump():
+    """Startet den Hintergrund-Worker, der schon während der Aufnahme Phrasen
+    transkribiert und tippt. No-op, wenn OFFLINE_LIVE=0."""
+    global _live_pump
+    if not _live_mode:
+        return
+    # Alte Blöcke aus einer vorherigen Aufnahme verwerfen.
+    while not _live_q.empty():
+        try:
+            _live_q.get_nowait()
+        except queue.Empty:
+            break
+    _live_pump = threading.Thread(target=_live_worker, daemon=True)
+    _live_pump.start()
+
 
 def start_recording():
-    global recording, audio_data, input_stream, samplerate
+    global recording, audio_data, input_stream, _silence_run, _silence_stop_fired
     if not recording:
         device_info = sd.query_devices(device_index)
         device_name = device_info['name']
-        # Use device's native sample rate and channel count
-        device_samplerate = int(device_info['default_samplerate'])
-        device_channels = min(device_info['max_input_channels'], 2)
-        samplerate = device_samplerate
 
-        msg = f"🎤 Recording from DEVICE {device_index}: {device_name} @ {device_samplerate}Hz, {device_channels}ch"
+        mode = "live (Phrasen während der Aufnahme)" if _live_mode else "klassisch (am Ende)"
+        msg = f"🎤 Recording from DEVICE {device_index}: {device_name} @ {samplerate}Hz mono — {mode}"
         logger.info(msg)
         print(msg)
 
         # Set recording flag FIRST to prevent re-entry during beep
         recording = True
         audio_data = []
+        _silence_run = 0.0
+        _silence_stop_fired = False
 
         play_start_recording_sound()
 
         try:
             input_stream = sd.InputStream(
                 device=device_index,
-                samplerate=device_samplerate,
-                channels=device_channels,
-                dtype='int16',
+                samplerate=samplerate,
+                channels=1,
+                dtype='float32',
+                blocksize=BLOCKSIZE,
                 callback=audio_callback
             )
             input_stream.start()
             logger.info("InputStream started")
+            _start_max_duration_timer()
+            _start_live_pump()
         except Exception as e:
             logger.error(f"Error starting input stream: {e}")
             recording = False
@@ -357,55 +465,112 @@ def start_recording():
             try:
                 logger.info("Trying fallback to default input device...")
                 input_stream = sd.InputStream(
-                    samplerate=device_samplerate,
+                    samplerate=samplerate,
                     channels=1,
-                    dtype='int16',
+                    dtype='float32',
+                    blocksize=BLOCKSIZE,
                     callback=audio_callback
                 )
                 input_stream.start()
                 recording = True
                 logger.info("Fallback InputStream started")
+                _start_max_duration_timer()
+                _start_live_pump()
             except Exception as e2:
                 logger.error(f"Fallback also failed: {e2}")
                 recording = False
 
 def stop_recording():
-    global recording, audio_data, input_stream
+    """Stoppt die Aufnahme SOFORT und gibt den Aufrufer frei.
+
+    Wichtig: diese Funktion läuft im evdev-Thread der Tastatur. Whisper hier
+    synchron laufen zu lassen blockiert das Einlesen der Tastatur-Events für die
+    Dauer der Transkription (Sekunden bis Minuten) — dann kommt der nächste
+    Alt-Doppeltipp nicht an und das Tool wirkt eingefroren. Deshalb: Stream
+    schließen, Audio übernehmen, Transkription an einen Worker-Thread übergeben.
+    """
+    global recording, audio_data, input_stream, _live_pump
     if recording:
         logger.info("Recording stopped...")
         print(">>> ⏹️ RECORDING STOPPED <<<\n")
         recording = False
+        _cancel_max_duration_timer()
+        play_stop_recording_sound()
 
         if input_stream:
             input_stream.stop()
             input_stream.close()
             input_stream = None
 
-        if audio_data and len(audio_data) > 0:
-            msg = f"✓ Recording completed: {sum(len(d) for d in audio_data)} samples"
-            logger.info(msg)
-            print(msg)
-            save_audio()
-            transcribe_and_output()
-        else:
+        chunks, audio_data = audio_data, []
+
+        if not chunks:
             logger.warning("No audio data recorded")
             print("⚠️  No audio data recorded")
-
-def save_audio():
-    global audio_data
-    try:
-        if not audio_data or len(audio_data) == 0:
-            logger.warning("No audio data to save.")
             return
 
-        # Concatenate all audio chunks
-        audio_array = np.concatenate(audio_data, axis=0)
-        sf.write(file_path, audio_array, samplerate=samplerate, subtype='PCM_16')
+        msg = f"✓ Recording completed: {sum(len(d) for d in chunks)} samples"
+        logger.info(msg)
+        print(msg)
+
+        if _live_mode:
+            # Der Live-Worker hat die Phrasen schon während der Aufnahme getippt.
+            # Nur noch: auf den finalen Tail-Flush warten und die volle WAV
+            # sichern — beides im Hintergrund, damit der Tastatur-Thread frei bleibt.
+            pump, _live_pump = _live_pump, None
+            threading.Thread(
+                target=_finish_live,
+                args=(pump, chunks, samplerate),
+                daemon=True,
+            ).start()
+        else:
+            threading.Thread(
+                target=_process_recording,
+                args=(chunks, samplerate),
+                daemon=True,
+            ).start()
+
+
+def _process_recording(chunks, rate):
+    """Worker (klassisch, OFFLINE_LIVE=0): Aufnahme speichern, komplett
+    transkribieren, tippen. Läuft NIE im Tastatur-Thread. Das Lock serialisiert
+    parallele Aufnahmen — Whisper ist nicht thread-safe und die Ausgabe soll in
+    der richtigen Reihenfolge landen."""
+    with _transcribe_lock:
+        path = save_audio(chunks, rate)
+        if path:
+            # Argumentlos aufrufen: abgeleitete Modi (z.B. claude) ersetzen
+            # transcribe_and_output durch eine argumentlose Variante, die
+            # base.file_path liest. save_audio() hat genau dorthin geschrieben.
+            transcribe_and_output()
+
+
+def _finish_live(pump, chunks, rate):
+    """Worker (Live-Modus): wartet auf den letzten Phrasen-Flush des Live-Workers
+    und speichert dann die volle Aufnahme. Es wird NICHT erneut alles am Stück
+    transkribiert — das haben die Live-Phrasen bereits erledigt."""
+    if pump is not None:
+        pump.join(timeout=120)
+    save_audio(chunks, rate)
+    print("✓ Live-Transkription abgeschlossen")
+
+
+def save_audio(chunks, rate):
+    """Schreibt die Aufnahme und liefert den Pfad (None bei Fehler)."""
+    try:
+        if not chunks:
+            logger.warning("No audio data to save.")
+            return None
+
+        audio_array = np.concatenate(chunks, axis=0)
+        sf.write(file_path, audio_array, samplerate=rate, subtype='PCM_16')
         logger.info(f"Audio saved to {file_path} ({len(audio_array)} samples)")
         print(f"✓ Audio saved to {file_path}")
+        return file_path
     except Exception as e:
         logger.error(f"Error saving audio: {e}")
         print(f"✗ Error saving audio: {e}")
+        return None
 
 
 alt_press_times = []
@@ -587,6 +752,83 @@ def transcribe_with_whisper(audio_file_path):
         logging.error(f"Failed to transcribe audio with Whisper: {e}")
         raise
 
+def transcribe_array(audio_float32):
+    """Transkribiert ein float32-Mono-16-kHz-Array direkt aus dem Speicher
+    (ohne Umweg über eine Datei) und liefert den Text."""
+    if audio_float32 is None or len(audio_float32) == 0:
+        return ""
+    try:
+        model = get_whisper_model()
+        result = model.transcribe(
+            audio_float32,
+            language="de",
+            task="transcribe",
+            fp16=torch.cuda.is_available(),
+            verbose=False,
+        )
+        return result["text"].strip()
+    except Exception as e:
+        logger.error(f"Live-Transkription fehlgeschlagen: {e}")
+        return ""
+
+
+def _flush_live(seg, seg_samples):
+    """Transkribiert eine fertige Phrase und tippt sie sofort an den Cursor."""
+    if seg_samples < LIVE_MIN_PHRASE * samplerate:
+        return
+    audio = np.concatenate(seg).astype(np.float32)
+    with _transcribe_lock:
+        text = transcribe_array(audio)
+    if text:
+        logger.info(f"Live-Phrase ({seg_samples/samplerate:.1f}s) → {text!r}")
+        print(f"📝 {text}")
+        _typer.type_at_cursor(text + " ")
+
+
+def _live_worker():
+    """Läuft während der Aufnahme: konsumiert Audio-Blöcke, segmentiert an
+    Sprechpausen (VAD) und tippt jede fertige Phrase sofort. Bricht nach dem
+    Stoppen ab, sobald die Queue leer ist, und flusht den letzten Rest."""
+    seg = []
+    seg_samples = 0
+    silence_run = 0.0
+    in_speech = False
+    block_dur = BLOCKSIZE / samplerate
+
+    while recording or not _live_q.empty():
+        try:
+            block = _live_q.get(timeout=0.1)
+        except queue.Empty:
+            continue
+
+        rms = float(np.sqrt(np.mean(block ** 2))) if len(block) else 0.0
+        voiced = rms >= RECORD_SILENCE_RMS
+
+        if voiced:
+            in_speech = True
+            seg.append(block)
+            seg_samples += len(block)
+            silence_run = 0.0
+        elif in_speech:
+            # Nachlaufende Stille behalten und die Pause zählen.
+            seg.append(block)
+            seg_samples += len(block)
+            silence_run += block_dur
+            if silence_run >= LIVE_MIN_SILENCE:
+                _flush_live(seg, seg_samples)
+                seg, seg_samples, silence_run, in_speech = [], 0, 0.0, False
+        # sonst: führende Stille vor jeder Sprache → verwerfen
+
+        # Sehr lange Phrasen ohne Pause zwangsweise flushen.
+        if seg_samples >= LIVE_MAX_PHRASE * samplerate:
+            _flush_live(seg, seg_samples)
+            seg, seg_samples, silence_run, in_speech = [], 0, 0.0, False
+
+    # Letzter Rest beim Stoppen.
+    if seg_samples > 0:
+        _flush_live(seg, seg_samples)
+
+
 def type_text_in_active_window(text):
     """Type text directly at the cursor position (Wayland).
 
@@ -599,13 +841,15 @@ def type_text_in_active_window(text):
     print("✓ Text getippt")
 
 
-def transcribe_and_output():
+def transcribe_and_output(audio_path=None):
+    if audio_path is None:
+        audio_path = file_path
     try:
         # Hinweis auf Start der Transkription
         print("Starting transcription...")
         logging.info("Starting transcription...")
 
-        transcription = transcribe_with_whisper(file_path)
+        transcription = transcribe_with_whisper(audio_path)
 
         if not transcription or transcription.strip() == "":
             print("No valid transcription found.")
@@ -616,7 +860,6 @@ def transcribe_and_output():
         print(f"Transcription: {transcription}")
         logging.info(f"Transcription: {transcription}")
         type_text_in_active_window(transcription)
-        play_stop_recording_sound()
     except Exception as e:
         logging.error(f"An error occurred during transcription: {e}")
         print(f"An error occurred during transcription: {e}")
@@ -635,13 +878,25 @@ if __name__ == "__main__":
         epilog="""
 Bedienung:
   Alt+Alt          Aufnahme starten
-  Alt+Alt          Aufnahme stoppen + transkribieren
+  Alt+Alt          Aufnahme stoppen + Rest transkribieren
+  (automatisch)    Stoppt bei Sprechpause > RECORD_SILENCE_STOP s
   Ctrl+C           Programm beenden
+
+Live-Modus (Standard):
+  Während der Aufnahme werden Phrasen an Sprechpausen sofort transkribiert und
+  am Cursor getippt — kein langes Warten am Ende. Die volle Aufnahme wird
+  trotzdem als WAV gesichert. OFFLINE_LIVE=0 → altes Verhalten (alles am Ende).
 
 Umgebungsvariablen:
   AUDIO_DEVICE          Input-Device Index (überschreibt Auswahl)
   AUDIO_OUTPUT_DEVICE   Output-Device Index (überschreibt Auswahl)
   WHISPER_MODEL         Modell (tiny/base/small/medium/large, Standard: small)
+  OFFLINE_LIVE          1 = live während Aufnahme (Standard), 0 = am Ende
+  RECORD_SILENCE_STOP   Sprechpause in s bis Auto-Stop, 0 = aus (Standard: 15.0)
+  STREAM_SILENCE_RMS    Schwelle Stille-Erkennung (Standard: 0.010)
+  STREAM_MIN_SILENCE    Pausenlänge in s zum Phrasen-Ende (Standard: 0.7)
+  STREAM_MIN_PHRASE     Minimale Phrasenlänge in s (Standard: 0.4)
+  STREAM_MAX_PHRASE     Max. Phrasenlänge in s ohne Pause (Standard: 15.0)
 
 Beispiele:
   ./run_offline.sh                     Interaktive Geräteauswahl (Standard)
@@ -709,7 +964,9 @@ Beispiele:
     print("\n" + "="*60)
     print(f"🎤 AUDIO DEVICE: #{device_index} - {device_name}")
     print(f"   Channels: {device_channels}")
-    print(f"   Sample Rate: {samplerate} Hz")
+    print(f"   Sample Rate: {samplerate} Hz mono")
+    live_txt = "AN (Phrasen während der Aufnahme)" if _live_mode else "AUS (alles am Ende)"
+    print(f"   Live-Transkription: {live_txt}")
     print("="*60)
 
     print("\nKonfiguration beim Start:")

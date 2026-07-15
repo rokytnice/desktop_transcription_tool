@@ -59,6 +59,10 @@ MIN_CHUNK = float(os.environ.get('STREAM_MIN_CHUNK', '2.0'))     # s
 MAX_BUFFER = float(os.environ.get('STREAM_MAX_BUFFER', '18.0'))  # s
 # Beam size — 1 keeps latency low; higher = a bit more accurate but slower.
 BEAM_SIZE = int(os.environ.get('STREAM_BEAM', '1'))
+# RMS below this counts as silence (shared threshold with the VAD mode).
+SILENCE_RMS = float(os.environ.get('STREAM_SILENCE_RMS', '0.010'))
+# Seconds of continuous silence before streaming auto-stops (0 = off).
+IDLE_TIMEOUT = float(os.environ.get('STREAM_IDLE_TIMEOUT', '15.0'))
 
 # Logger — file handler is verbose, console stays quiet so the live text is readable.
 logger = logging.getLogger()
@@ -699,12 +703,30 @@ class FasterStreamingTranscriber:
         online = OnlineASRProcessor(get_model())
         since_last = 0
         chunk_samples = int(MIN_CHUNK * samplerate)
+        idle_run = 0.0        # s zusammenhängender Stille
+        auto_stop_fired = False
 
         while self.active or not self.q.empty():
             try:
                 block = self.q.get(timeout=0.1)
                 online.insert_audio_chunk(block)
                 since_last += len(block)
+
+                rms = float(np.sqrt(np.mean(block ** 2))) if len(block) else 0.0
+                if rms >= SILENCE_RMS:
+                    idle_run = 0.0
+                else:
+                    idle_run += len(block) / samplerate
+
+                # Leerlauf: nach IDLE_TIMEOUT ohne Sprache automatisch stoppen.
+                # stop() joint diesen Worker-Thread → muss aus einem eigenen
+                # Thread kommen, sonst Deadlock (self-join).
+                if (IDLE_TIMEOUT > 0 and not auto_stop_fired
+                        and self.active and idle_run >= IDLE_TIMEOUT):
+                    auto_stop_fired = True
+                    logger.info(f"Idle {idle_run:.1f}s ≥ {IDLE_TIMEOUT}s — auto-stop")
+                    print(f"\n💤 {IDLE_TIMEOUT:.0f}s Leerlauf — Streaming automatisch gestoppt.")
+                    threading.Thread(target=self.stop, daemon=True).start()
             except queue.Empty:
                 pass
 
@@ -896,6 +918,7 @@ if __name__ == "__main__":
 Bedienung:
   Alt+Alt          Streaming starten
   Alt+Alt          Streaming stoppen
+  (automatisch)    Streaming stoppt nach STREAM_IDLE_TIMEOUT s ohne Sprache
   Ctrl+C           Programm beenden
 
 Funktionsweise:
@@ -911,6 +934,8 @@ Umgebungsvariablen:
   STREAM_MIN_CHUNK      Update-Takt in s (~2s ≈ 3-5 Wörter pro Schub, Standard: 2.0)
   STREAM_MAX_BUFFER     Puffer-Obergrenze in s vor Beschnitt (Standard: 18.0)
   STREAM_BEAM           Beam-Size (1 = schnellste Latenz, Standard: 1)
+  STREAM_SILENCE_RMS    Schwelle Stille-Erkennung (Standard: 0.010)
+  STREAM_IDLE_TIMEOUT   Leerlauf in s bis Auto-Stop, 0 = aus (Standard: 15.0)
 
 Tipp:
   Bei Standard-Takt (2s, ~3-5 Wörter pro Schub) hält 'small' auch auf CPU Schritt.

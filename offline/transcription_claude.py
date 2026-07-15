@@ -127,6 +127,12 @@ _orig_start_recording = base.start_recording
 base.start_recording = _start_recording_hook
 base.transcribe_and_output = transcribe_and_output
 
+# Live-Pipelining (offline-Default) hier AUS: der claude-Modus transkribiert die
+# ganze Aufnahme am Stück und routet den Text an Claude Code (GUI-Fenster) —
+# ein Live-Worker würde stattdessen Phrasen am Cursor tippen und
+# transcribe_and_output nie aufrufen.
+base._live_mode = False
+
 
 # ── GUI ──────────────────────────────────────────────────────────────────────
 class ChatWindow:

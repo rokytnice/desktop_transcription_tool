@@ -12,10 +12,17 @@
 #   claude             Sprache → Claude Code → Antwort im Fenster
 #
 # OPTIONEN
-#   --model NAME   Whisper-Modell (tiny|base|small|medium|large)  (Standard: small)
-#   --device IDX   Audio-Gerät-Index (Input+Output)  (Standard: -a / Auto)
-#   --no-start     Service nur einrichten + aktivieren, nicht sofort starten
-#   -h, --help     Diese Hilfe anzeigen
+#   --model NAME        Whisper-Modell (tiny|base|small|medium|large)  (Standard: small)
+#   --device IDX        Audio-Gerät-Index (Input+Output)  (Standard: -a / Auto)
+#   --min-silence S     Pause in s, die eine Phrase beendet     (Standard: 0.7)
+#   --silence-rms X     Stille-Schwelle (RMS)                   (Standard: 0.010)
+#   --max-phrase S      Zwangs-Flush langer Phrasen in s        (Standard: 15)
+#   --idle-timeout S    Leerlauf bis Auto-Stop in s, 0 = aus    (Standard: 15)
+#   --no-start          Service nur einrichten + aktivieren, nicht sofort starten
+#   -h, --help          Diese Hilfe anzeigen
+#
+#   Die Pausen-Optionen gelten für streaming/faster-streaming und landen als
+#   STREAM_*-Umgebungsvariablen in der Unit.
 #
 # BESCHREIBUNG
 #   Erzeugt eine systemd-User-Unit (transcription.service) für den gewählten
@@ -56,16 +63,33 @@ MODE="offline"
 WHISPER_MODEL="small"
 DEVICE=""
 DO_START=1
+# VAD-/Pausen-Tuning (nur für streaming/faster-streaming relevant, leere Werte
+# = Defaults des Python-Skripts). Sekunden bzw. RMS-Schwelle.
+MIN_SILENCE=""      # Pause, die eine Phrase beendet (Default 0.7s)
+SILENCE_RMS=""      # Stille-Schwelle (Default 0.010)
+MAX_PHRASE=""       # Zwangs-Flush langer Phrasen (Default 15s)
+IDLE_TIMEOUT=""     # Leerlauf bis Auto-Stop, 0 = aus (Default 15s)
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         faster-streaming|streaming|offline|claude) MODE="$1"; shift ;;
         --model) WHISPER_MODEL="$2"; shift 2 ;;
         --device) DEVICE="$2"; shift 2 ;;
+        --min-silence) MIN_SILENCE="$2"; shift 2 ;;
+        --silence-rms) SILENCE_RMS="$2"; shift 2 ;;
+        --max-phrase) MAX_PHRASE="$2"; shift 2 ;;
+        --idle-timeout) IDLE_TIMEOUT="$2"; shift 2 ;;
         --no-start) DO_START=0; shift ;;
         *) echo "Unbekannte Option: $1 (./setup-service.sh --help)"; exit 1 ;;
     esac
 done
+
+# VAD-Env-Zeilen für die Unit zusammenbauen (nur gesetzte Werte)
+VAD_ENV=""
+[[ -n "$MIN_SILENCE" ]]  && VAD_ENV+="Environment=\"STREAM_MIN_SILENCE=$MIN_SILENCE\""$'\n'
+[[ -n "$SILENCE_RMS" ]]  && VAD_ENV+="Environment=\"STREAM_SILENCE_RMS=$SILENCE_RMS\""$'\n'
+[[ -n "$MAX_PHRASE" ]]   && VAD_ENV+="Environment=\"STREAM_MAX_PHRASE=$MAX_PHRASE\""$'\n'
+[[ -n "$IDLE_TIMEOUT" ]] && VAD_ENV+="Environment=\"STREAM_IDLE_TIMEOUT=$IDLE_TIMEOUT\""$'\n'
 
 # ── Modus → Python-Script ───────────────────────────────────────────────────
 case "$MODE" in
@@ -148,20 +172,16 @@ PartOf=graphical-session.target
 
 [Service]
 Type=simple
-# Höhere Priorität: mehr CPU-/IO-Anteil unter Last (cgroup-Gewichte, brauchen
-# KEIN root — Default ist 100, hier deutlich höher, damit die Whisper-
-# Transkription auch bei ausgelastetem System flüssig bleibt).
-CPUWeight=900
-IOWeight=900
-# Negatives Nice (echte Scheduler-Priorität) ist für User-Services standardmäßig
-# gesperrt (RLIMIT_NICE=0). Aktivieren mit:
-#   echo '$USER  -  nice  -10' | sudo tee /etc/security/limits.d/transcription-nice.conf
-# danach neu einloggen und in dieser Unit `Nice=-10` ergänzen.
+# Normale Priorität: gleiche CPU-/IO-Gewichte wie jeder andere Prozess (Default
+# 100). Höhere Gewichte haben den Rest des Desktops unter Last ausgebremst.
+CPUWeight=100
+IOWeight=100
+Nice=0
 Environment="WHISPER_MODEL=$WHISPER_MODEL"
 Environment="XDG_RUNTIME_DIR=$RUNTIME_DIR"
 Environment="WAYLAND_DISPLAY=$WL_DISPLAY"
 Environment="DISPLAY=$X_DISPLAY"
-$DEVICE_ENV
+$VAD_ENV$DEVICE_ENV
 WorkingDirectory=$OFFLINE_DIR
 ExecStart=$VENV_PY $OFFLINE_DIR/$PY_SCRIPT -a
 # on-failure statt always: sauberer Exit 0 (z. B. Single-Instance-Lock belegt,
@@ -201,6 +221,38 @@ journalctl --user -u $SERVICE -f
 CMD
 chmod +x "$HOME/.local/bin/transcription-status" "$HOME/.local/bin/transcription-log"
 
+# ── `transcription-mode` — Service-Modus umschalten (offline ⇄ vad ⇄ …) ─────
+cat > "$HOME/.local/bin/transcription-mode" << MODESWITCH
+#!/bin/bash
+#
+# transcription-mode — Service-Modus umschalten
+#
+#   transcription-mode              aktuellen Modus anzeigen
+#   transcription-mode offline      Aufnehmen → stoppen → tippen
+#   transcription-mode vad          Streaming an Sprechpausen (Standard-Streaming)
+#   transcription-mode stream       Wortweises Live-Streaming (faster-whisper)
+#   transcription-mode claude       Sprache → Claude Code
+#   transcription-mode meeting      Meeting-Modus starten (manuell, kein Service)
+#
+# Weitere Optionen (z. B. --min-silence 1.0) werden an setup-service.sh durchgereicht.
+REPO="$REPO_DIR"
+case "\${1:-}" in
+    "" )
+        cur=\$(systemctl --user list-units 'transcription-*' --plain --no-legend | awk '{print \$1}' | head -1)
+        echo "Aktiver Modus: \${cur:-keiner}"
+        echo "Umschalten: transcription-mode offline|vad|stream|claude"
+        echo "Meeting (manuell): transcription-mode meeting"
+        ;;
+    offline)         exec "\$REPO/setup-service.sh" offline          "\${@:2}" ;;
+    vad|streaming)   exec "\$REPO/setup-service.sh" streaming        "\${@:2}" ;;
+    stream|faster)   exec "\$REPO/setup-service.sh" faster-streaming "\${@:2}" ;;
+    claude)          exec "\$REPO/setup-service.sh" claude           "\${@:2}" ;;
+    meeting)         exec "\$HOME/.local/bin/transcription" meeting  "\${@:2}" ;;
+    *) echo "Unbekannter Modus: \$1 (offline|vad|stream|claude|meeting)"; exit 1 ;;
+esac
+MODESWITCH
+chmod +x "$HOME/.local/bin/transcription-mode"
+
 # ── `transcription` — ein Kommando für alle Modi (manueller Start im Terminal) ─
 # Quoted-Heredoc (nichts expandiert), Repo-Pfad per Platzhalter __REPO__ ersetzt.
 cat > "$HOME/.local/bin/transcription" << 'LAUNCHER'
@@ -213,6 +265,7 @@ cat > "$HOME/.local/bin/transcription" << 'LAUNCHER'
 #   stream     Wortweise live beim Sprechen (faster-whisper)
 #   vad        Streaming an jeder Sprechpause (Voice Activity Detection)  [Standard]
 #   claude     Sprache → Claude Code → Antwort im Fenster
+#   meeting    Mikro+Speaker mithören → Transkript + Live-Stichpunkte + Protokoll
 #
 # OPTIONEN (werden an das run_*.sh durchgereicht)
 #   (kein Flag)   -a: ein Gerät für Input+Output (z.B. Jabra)
@@ -234,13 +287,14 @@ REPO="__REPO__"
 
 MODE="vad"
 case "$1" in
-    offline|stream|vad|claude) MODE="$1"; shift ;;
+    offline|stream|vad|claude|meeting) MODE="$1"; shift ;;
 esac
 case "$MODE" in
     offline) SCRIPT="run_offline.sh" ;;
     stream)  SCRIPT="run_faster_streaming.sh" ;;
     vad)     SCRIPT="run_streaming.sh" ;;
     claude)  SCRIPT="run_claude.sh" ;;
+    meeting) SCRIPT="run_meeting.sh" ;;
 esac
 
 # Laufenden Transcription-Service stoppen (gegen doppeltes Tippen).
@@ -278,11 +332,36 @@ restore_services() {
 }
 trap restore_services EXIT INT TERM
 
-# Geräte-Default: ohne Argumente -a; --menu = interaktiv (kein -a)
-if [[ $# -eq 0 ]]; then
-    set -- -a
-elif [[ "$1" == "--menu" ]]; then
-    shift
+# Verwaiste MANUELLE Läufe beenden — die halten sonst den Single-Instance-Lock
+# und der neue Start steigt sofort wieder aus. Ein manueller Start heißt:
+# DIESE Instanz soll tippen. (meeting/duplex haben eigene Locks und tippen
+# nicht am Cursor — die bleiben unangetastet.)
+TYPER_PATTERN='bin/python[0-9.]* .*transcription_(offline|streaming|faster_streaming|claude)\.py'
+OLD_PIDS=$(pgrep -f "$TYPER_PATTERN")
+if [[ -n "$OLD_PIDS" ]]; then
+    for pid in $OLD_PIDS; do
+        echo "→ beende alte Instanz: PID $pid ($(ps -o args= -p "$pid" 2>/dev/null | awk '{print $NF, $(NF-1)}' | head -c 60))"
+        kill -INT "$pid" 2>/dev/null || true
+    done
+    for _ in 1 2 3 4 5; do
+        pgrep -f "$TYPER_PATTERN" >/dev/null || break
+        sleep 1
+    done
+    if pgrep -f "$TYPER_PATTERN" >/dev/null; then
+        echo "→ Instanz reagiert nicht — hartes Beenden (SIGKILL)"
+        pkill -9 -f "$TYPER_PATTERN" 2>/dev/null || true
+        sleep 1
+    fi
+fi
+
+# Geräte-Default: ohne Argumente -a; --menu = interaktiv (kein -a).
+# meeting nutzt parec (PipeWire-Quellen direkt) — keine Geräte-Flags.
+if [[ "$MODE" != "meeting" ]]; then
+    if [[ $# -eq 0 ]]; then
+        set -- -a
+    elif [[ "$1" == "--menu" ]]; then
+        shift
+    fi
 fi
 
 echo "→ Modus: $MODE  ($SCRIPT)"
