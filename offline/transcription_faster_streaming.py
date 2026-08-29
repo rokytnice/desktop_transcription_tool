@@ -31,6 +31,7 @@ from evdev import InputDevice, ecodes, list_devices
 from faster_whisper import WhisperModel
 import threading
 import queue
+import _typer  # gemeinsames Tipp-Backend (hier nur für strip_auto_periods)
 import argparse
 
 # Ensure the environment is correctly configured
@@ -106,7 +107,10 @@ def get_model():
         compute = "float16" if device == "cuda" else "int8"
         print(f"📥 Loading faster-whisper {name} ({device}/{compute}, one-time)...")
         logger.info(f"Loading faster-whisper {name} on {device}/{compute}")
-        _model = WhisperModel(name, device=device, compute_type=compute)
+        # cpu_threads begrenzen, sonst nimmt CTranslate2 alle Kerne und verdrängt
+        # den Audio-Callback-Thread unter Last (Sample-Verlust → schlechte Qualität).
+        cpu_threads = 0 if device == "cuda" else max(2, min(4, os.cpu_count() or 4))
+        _model = WhisperModel(name, device=device, compute_type=compute, cpu_threads=cpu_threads)
         logger.info("faster-whisper ready")
         print(f"✓ faster-whisper {name} ready")
     return _model
@@ -690,7 +694,7 @@ class FasterStreamingTranscriber:
     def _emit(self, words):
         if not words:
             return
-        text = "".join(words)
+        text = _typer.strip_auto_periods("".join(words))
         if self._first_emit:
             text = text.lstrip()   # avoid a leading space at the cursor
             self._first_emit = False

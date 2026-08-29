@@ -27,10 +27,14 @@ import warnings
 warnings.filterwarnings("ignore", message="FP16 is not supported on CPU; using FP32 instead")
 import whisper
 import torch
+# Whisper würde sonst alle CPU-Kerne belegen und den Audio-Callback-Thread
+# (muss sein Zeitfenster einhalten, sonst Sample-Verlust) unter Last verdrängen.
+torch.set_num_threads(max(2, min(4, os.cpu_count() or 4)))
 import evdev
 from evdev import InputDevice, ecodes, list_devices
 import threading
 import queue
+import _typer  # gemeinsames Tipp-Backend (hier nur für strip_auto_periods)
 import argparse
 
 # Ensure the environment is correctly configured
@@ -528,7 +532,7 @@ def transcribe_chunk(audio_float32):
             fp16=torch.cuda.is_available(),
             verbose=False,
         )
-        return result["text"].strip()
+        return _typer.strip_auto_periods(result["text"].strip())
     except Exception as e:
         logger.error(f"Transcription error: {e}")
         return ""

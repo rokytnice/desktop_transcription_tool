@@ -30,6 +30,23 @@ YDOTOOL_SOCKET = os.environ.get('YDOTOOL_SOCKET') or f"/run/user/{os.getuid()}/.
 TYPER = None      # 'ydotool' | 'wtype' | 'clipboard'
 KB_LAYOUT = 'us'  # active keyboard layout, set by detect_typer()
 
+# ── Satzpunkte ──────────────────────────────────────────────────────────────
+# Whisper setzt am Ende jeder erkannten Phrase automatisch einen Punkt — beim
+# Live-Diktat also nach jeder Sprechpause. Das ist beim Diktieren unerwünscht;
+# Punkte will man selbst sprechen/tippen. AUTO_PERIODS=1 stellt das alte
+# Verhalten wieder her.
+AUTO_PERIODS = os.environ.get('AUTO_PERIODS', '0') == '1'
+# Punkt am Wort-/Zeilenende (auch mehrfach: „…"). Punkte MITTEN im Wort
+# bleiben: Zahlen (1.5), Abkürzungen (z.B.), URLs/Dateinamen (foo.py).
+_TRAILING_PERIOD_RE = re.compile(r'(?<=[^\s.])(?<!\.\w)\.+(?=\s|$)')
+
+
+def strip_auto_periods(text):
+    """Entfernt automatisch gesetzte Satzpunkte aus einem Diktat-Text."""
+    if AUTO_PERIODS or not text:
+        return text
+    return _TRAILING_PERIOD_RE.sub('', text)
+
 # ── ydotool layout fix ──────────────────────────────────────────────────────
 # ydotool injects RAW Linux keycodes ("we're using raw keycodes now", its own
 # --help) and assumes a US-QWERTY layout. On a German (QWERTZ) compositor that
