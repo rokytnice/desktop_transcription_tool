@@ -26,3 +26,7 @@ Anaconda3-*/
 # Large files
 *.iso
 *.exe
+# Lokale npm-Installation (claude-code), gehört nicht ins Repo
+node_modules/
+package.json
+package-lock.json
