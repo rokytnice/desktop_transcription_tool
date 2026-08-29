@@ -78,7 +78,10 @@ for unit in "$HOME"/.config/systemd/user/transcription-*.service; do
     # is-active meldet bei einem gerade (neu) startenden Service "activating" —
     # dann greift --quiet nicht. Deshalb jeden nicht-inaktiven Zustand stoppen,
     # sonst blockiert der flappende Service den Single-Instance-Lock.
-    state="$(systemctl --user is-active "$name" 2>/dev/null)"
+    # `|| true` ist Pflicht: is-active liefert bei inaktiver Unit Exit 3, und
+    # eine Zuweisung erbt den Status der Command-Substitution — unter `set -e`
+    # würde start.sh hier stumm mit 3 abbrechen, sobald kein Service läuft.
+    state="$(systemctl --user is-active "$name" 2>/dev/null || true)"
     case "$state" in
         active|activating|reloading|deactivating)
             echo "→ stoppe laufenden Service: $name ($state)"

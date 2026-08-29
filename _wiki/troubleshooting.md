@@ -1,6 +1,42 @@
 # Troubleshooting
 
-_Zuletzt aktualisiert: 2026-07-11_
+_Zuletzt aktualisiert: 2026-08-15_
+
+## Transkriptionsqualität schlecht bei hoher System-Last
+
+**Symptom:** Läuft der Rechner gerade unter starker CPU-Last (Builds, andere
+Apps), wird die Transkription auffällig schlechter — nicht langsamer, sondern
+inhaltlich falsch/lückenhaft.
+
+**Ursache:** Der PortAudio-Callback-Thread, der die Mikrofon-Samples einliest,
+muss sein Zeitfenster einhalten. Wird er unter Last verdrängt, gehen Samples
+verloren oder werden verzerrt aufgenommen — **bevor** Whisper sie überhaupt
+sieht. Das äußert sich als schlechte Transkription, nicht als Absturz oder
+Verzögerung. Verschärft wurde das dadurch, dass Whisper/faster-whisper beim
+Inferenz-Lauf standardmäßig **alle** CPU-Kerne belegt und damit genau diesen
+Audio-Thread zusätzlich verdrängt.
+Der Offline-Modus (Standard) hat außerdem gar keine Xrun/Status-Diagnose
+geloggt — Streaming/Faster-Streaming schon.
+
+**Fix (ab 2026-07-24):**
+- `audio_callback` in `transcription_offline.py` loggt jetzt `Audio status: …`
+  bei PortAudio-Overflow/Underflow (analog zu den Streaming-Modi). Taucht das
+  im Log auf, wenn die Qualität schlecht war → Bestätigung der Ursache.
+- Alle drei Modi begrenzen die CPU-Threads der Inferenz auf `min(4, nproc)`
+  (`torch.set_num_threads()` bzw. `WhisperModel(..., cpu_threads=...)` bei
+  faster-whisper), damit der Audio-Thread unter Last nicht verdrängt wird.
+- `setup-service.sh`: moderater Priority-Bump (`Nice=-5`, `CPUWeight=150`
+  statt vorher 0/100, ab 2026-07-24). Der frühere Rollback betraf die
+  Kombination "unbegrenzte Threads + hohe Priorität" — mit dem 4-Thread-Cap
+  greift die Priorität jetzt nur auf einen Teil der Kerne, der Rest des
+  Desktops bleibt unangetastet. Nach der Änderung `./setup-service.sh` erneut
+  laufen lassen, damit die Unit-Datei neu geschrieben und der Service neu
+  gestartet wird.
+
+**Wenn es weiter auftritt:** Log auf `Audio status:`-Zeilen prüfen. Falls die
+dort auftauchen: in `setup-service.sh` zurück auf `CPUWeight=100`/`Nice=0`
+und `./setup-service.sh` erneut ausführen, oder ein kleineres Modell
+(`WHISPER_MODEL=base`/`tiny`) während der Aufnahme nutzen.
 
 ## ydotool tippt Z als Y / falsche Umlaute (deutsches Layout)
 
@@ -130,3 +166,21 @@ Transkriptionslauf über das Rest-Audio und gibt ALLE noch nicht getippten
 Wörter aus. `stop()` schließt zuerst den Stream, der Worker drained die Queue,
 dann `finish()`, danach der Stop-Beep — so ist die Ausgabe garantiert komplett,
 bevor der „fertig"-Ton kommt.
+
+## `./start.sh` beendet sich sofort und wortlos (Exit 3)
+
+**Symptom:** `./start.sh` (bzw. der `transcription`-Launcher) kehrt ohne jede
+Ausgabe zurück, Exit-Code 3. Trat auf, sobald **kein** Transcription-Service
+lief — mit laufendem Service funktionierte es.
+
+**Ursache:** `set -euo pipefail` plus
+`state="$(systemctl --user is-active "$name")"`. `is-active` liefert für eine
+inaktive Unit **Exit 3**, und eine Variablenzuweisung erbt den Status ihrer
+Command-Substitution — `set -e` bricht das Script also mitten in der
+Service-Stopp-Schleife ab, bevor irgendein `echo` kam. Gleiches Muster mit
+`pgrep` (Exit 1, wenn nichts läuft) beim Aufräumen alter Instanzen.
+
+**Fix:** `|| true` an beide Command-Substitutions (`start.sh`,
+`setup-service.sh`). **Regel:** In diesen Scripts jede Zuweisung aus einem
+Kommando, das legitim ≠ 0 zurückgeben kann (`systemctl is-active`, `pgrep`,
+`grep`), mit `|| true` absichern — sonst stirbt das Script stumm.

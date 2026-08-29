@@ -60,7 +60,10 @@ fi
 
 # ── Argumente parsen ────────────────────────────────────────────────────────
 MODE="offline"
-WHISPER_MODEL="small"
+# base statt small: deutlich weniger Rechenlast pro Inferenz-Lauf, damit unter
+# System-Last mehr Spielraum für den Audio-Callback-Thread bleibt (siehe
+# _wiki/troubleshooting.md, "Transkriptionsqualität schlecht bei hoher Last").
+WHISPER_MODEL="base"
 DEVICE=""
 DO_START=1
 # VAD-/Pausen-Tuning (nur für streaming/faster-streaming relevant, leere Werte
@@ -172,11 +175,18 @@ PartOf=graphical-session.target
 
 [Service]
 Type=simple
-# Normale Priorität: gleiche CPU-/IO-Gewichte wie jeder andere Prozess (Default
-# 100). Höhere Gewichte haben den Rest des Desktops unter Last ausgebremst.
-CPUWeight=100
+# Leichter Vorrang statt Default (100/0): Whisper-Inferenz ist inzwischen auf
+# max. 4 Threads gedeckelt (torch.set_num_threads/cpu_threads in den
+# transcription_*.py), belegt also nur einen Teil der Kerne. Ein früherer
+# Versuch mit unbegrenzten Threads + hoher Priorität hat den ganzen Desktop
+# ausgebremst — das war die Kombination aus "alle Kerne" + "bevorzugt", nicht
+# die Priorität allein. Mit dem Thread-Cap ist ein moderater Bump risikoarm:
+# betrifft höchstens 4 von 20 Kernen, die übrigen bleiben für den Rest des
+# Desktops uneingeschränkt verfügbar. Bei erneuten Aussetzern unter Last
+# (siehe "Audio status:" im Log) auf 100/0 zurücksetzen.
+CPUWeight=150
 IOWeight=100
-Nice=0
+Nice=-5
 Environment="WHISPER_MODEL=$WHISPER_MODEL"
 Environment="XDG_RUNTIME_DIR=$RUNTIME_DIR"
 Environment="WAYLAND_DISPLAY=$WL_DISPLAY"
@@ -307,7 +317,10 @@ for unit in "$HOME"/.config/systemd/user/transcription-*.service; do
     # is-active meldet bei einem gerade (neu) startenden Service "activating" —
     # dann greift --quiet nicht. Deshalb jeden nicht-inaktiven Zustand stoppen,
     # sonst blockiert der flappende Service den Single-Instance-Lock.
-    state="$(systemctl --user is-active "$name" 2>/dev/null)"
+    # `|| true` ist Pflicht: is-active liefert bei inaktiver Unit Exit 3, und
+    # eine Zuweisung erbt den Status der Command-Substitution — unter `set -e`
+    # bräche der Launcher hier stumm ab, sobald kein Service läuft.
+    state="$(systemctl --user is-active "$name" 2>/dev/null || true)"
     case "$state" in
         active|activating|reloading|deactivating)
             echo "→ stoppe laufenden Service: $name ($state)"
@@ -337,7 +350,8 @@ trap restore_services EXIT INT TERM
 # DIESE Instanz soll tippen. (meeting/duplex haben eigene Locks und tippen
 # nicht am Cursor — die bleiben unangetastet.)
 TYPER_PATTERN='bin/python[0-9.]* .*transcription_(offline|streaming|faster_streaming|claude)\.py'
-OLD_PIDS=$(pgrep -f "$TYPER_PATTERN")
+# pgrep gibt Exit 1 zurück, wenn nichts läuft — unter `set -e` sonst Abbruch.
+OLD_PIDS=$(pgrep -f "$TYPER_PATTERN" || true)
 if [[ -n "$OLD_PIDS" ]]; then
     for pid in $OLD_PIDS; do
         echo "→ beende alte Instanz: PID $pid ($(ps -o args= -p "$pid" 2>/dev/null | awk '{print $NF, $(NF-1)}' | head -c 60))"
