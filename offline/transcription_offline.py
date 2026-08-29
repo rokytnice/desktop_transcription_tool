@@ -4,6 +4,7 @@ import sounddevice as sd
 import soundfile as sf
 import numpy as np
 import os
+import re
 import subprocess
 import sys
 import signal
@@ -14,6 +15,9 @@ import warnings
 warnings.filterwarnings("ignore", message="FP16 is not supported on CPU; using FP32 instead")
 import whisper
 import torch
+# Whisper würde sonst alle CPU-Kerne belegen und den Audio-Callback-Thread
+# (muss sein Zeitfenster einhalten, sonst Sample-Verlust) unter Last verdrängen.
+torch.set_num_threads(max(2, min(4, os.cpu_count() or 4)))
 import evdev
 from evdev import InputDevice, ecodes, list_devices
 import threading
@@ -51,17 +55,67 @@ _silence_run = 0.0
 _silence_stop_fired = False
 
 # ── Live-Pipelining (OFFLINE_LIVE) ───────────────────────────────────────────
-# Statt am Ende die GANZE Aufnahme zu transkribieren (langes Warten), läuft
-# während der Aufnahme ein Hintergrund-Worker mit: er segmentiert an
-# Sprechpausen (VAD) und transkribiert/tippt jede fertige Phrase SOFORT. Beim
-# Stoppen ist nur noch der letzte kurze Rest offen — kaum Wartezeit. Die volle
-# WAV wird trotzdem wie bisher gespeichert. OFFLINE_LIVE=0 → altes Verhalten
-# (aufnehmen → stoppen → alles am Stück transkribieren).
-_live_mode = os.environ.get('OFFLINE_LIVE', '1') != '0'
+# Standard ist klassisch: aufnehmen → stoppen → die GANZE Aufnahme am Stück
+# transkribieren. Optional (OFFLINE_LIVE=1) läuft während der Aufnahme ein
+# Hintergrund-Worker mit: er segmentiert an Sprechpausen (VAD) und
+# transkribiert/tippt jede fertige Phrase sofort. Das Live-Tippen zerlegt das
+# Diktat aber in Phrasen-Häppchen — deshalb bewusst opt-in.
+_live_mode = os.environ.get('OFFLINE_LIVE', '0') != '0'
 # VAD-/Segment-Tuning (teilt sich die Schwellen mit dem Streaming-Modus).
 LIVE_MIN_SILENCE = float(os.environ.get('STREAM_MIN_SILENCE', '0.7'))  # s Pause → Phrasen-Ende
 LIVE_MIN_PHRASE = float(os.environ.get('STREAM_MIN_PHRASE', '0.4'))    # s min. Phrase zum Transkribieren
 LIVE_MAX_PHRASE = float(os.environ.get('STREAM_MAX_PHRASE', '15.0'))   # s Force-Flush langer Phrase
+# Whisper wurde auf Untertitel-Korpora trainiert und gibt auf Stille/Rauschen
+# deren Abspänne aus ("Untertitel: SWR 2020", "Vielen Dank."). Zwei Filter:
+# no_speech_prob des Segments und ein Textabgleich gegen bekannte Artefakte.
+LIVE_NO_SPEECH_MAX = float(os.environ.get('STREAM_NO_SPEECH_MAX', '0.6'))
+_SENDER = r'(?:swr|zdf|ard|br|wdr|ndr|mdr|rbb|orf|3sat|arte|srf|zdf\.de|amara\.org)'
+_FUELL = r'(?:im|auftrag|von|des|der|die|und|f(?:ü|u)r|mit|by|the|community)'
+# Abspann-Zeile: startet mit "Untertitel…" oder einem Sender und besteht sonst
+# nur noch aus Füllwörtern, Sendernamen und Jahreszahl.
+_ABSPANN = (
+    r'(?:untertitel(?:ung)?|' + _SENDER + r')\b'
+    r'(?:[\s:,.\-]+(?:' + _FUELL + r'|' + _SENDER + r'|\d{4}))*'
+)
+# Harte Artefakte: Abspann-/Copyright-Zeilen und reine Satzzeichen. Die
+# diktiert niemand — immer verwerfen.
+_HALLUCINATION_HARD_RE = re.compile(
+    r'^(?:'
+    + _ABSPANN +
+    r'|copyright\b(?:[\s:,.\-]+(?:' + _FUELL + r'|' + _SENDER + r'|\d{4}))*'
+    r'|(?:vielen\s+)?dank(?:e)?\s+f(?:ü|u)r(?:s)?\s+(?:zuschauen|zusehen|die\s+aufmerksamkeit)'
+    r'|(?:[.,!?\-\s…«»*])+'
+    r')[\s.!?,\-–—…*]*$',
+    re.IGNORECASE,
+)
+# Mehrdeutig: häufige Halluzination, aber genauso echtes Diktat ("Vielen Dank."
+# am Mail-Ende). Nur verwerfen, wenn Whisper ohnehin Zweifel an Sprache hat.
+_HALLUCINATION_SOFT_RE = re.compile(
+    r'^(?:'
+    r'(?:vielen\s+)?dank(?:e)?'
+    r'|bis\s+zum\s+n(?:ä|a)chsten\s+mal'
+    r'|tsch(?:ü|u)ss|hallo|ja|ok(?:ay)?|so'
+    r')[\s.!?,\-–—…*]*$',
+    re.IGNORECASE,
+)
+# Ab hier gilt eine mehrdeutige Phrase als Halluzination (unter dem harten
+# LIVE_NO_SPEECH_MAX, sonst hätte die Stufe keine Wirkung).
+LIVE_NO_SPEECH_SOFT = float(os.environ.get('STREAM_NO_SPEECH_SOFT', '0.25'))
+
+
+def _is_hallucination(text, no_speech=0.0):
+    """True, wenn der Text ein Whisper-Stille-Artefakt ist.
+
+    Harte Abspann-Muster fliegen immer raus; mehrdeutige Kurzphrasen nur, wenn
+    no_speech_prob zusätzlich gegen echte Sprache spricht."""
+    stripped = text.strip()
+    if not stripped:
+        return True
+    if _HALLUCINATION_HARD_RE.match(stripped):
+        return True
+    return bool(
+        no_speech >= LIVE_NO_SPEECH_SOFT and _HALLUCINATION_SOFT_RE.match(stripped)
+    )
 _live_q = queue.Queue()   # float32-Blöcke aus dem Audio-Callback an den Live-Worker
 _live_pump = None         # aktueller Live-Worker-Thread
 
@@ -391,6 +445,10 @@ def _on_silence_stop():
 def audio_callback(indata, frames, time, status):
     """Callback to capture audio data (16 kHz mono float32)."""
     global audio_data, recording, _silence_run, _silence_stop_fired
+    if status:
+        # PortAudio-Overflow/Underflow — meist ein Zeichen, dass der Audio-Thread
+        # unter CPU-Last sein Zeitfenster verpasst hat (verlorene/verzerrte Samples).
+        logger.warning(f"Audio status: {status}")
     if recording:
         # Kanal 0 als 1-D-float32; deckt Mono und (Fallback-)Mehrkanal ab.
         block = indata[:, 0].copy() if indata.ndim > 1 else indata.copy()
@@ -743,7 +801,7 @@ def transcribe_with_whisper(audio_file_path):
         model = get_whisper_model()
         result = model.transcribe(audio_file_path, language="de", task="transcribe")
 
-        transcription = result["text"]
+        transcription = _typer.strip_auto_periods(result["text"])
         logging.info(f"Transcription result: {transcription}")
 
         return transcription
@@ -754,9 +812,12 @@ def transcribe_with_whisper(audio_file_path):
 
 def transcribe_array(audio_float32):
     """Transkribiert ein float32-Mono-16-kHz-Array direkt aus dem Speicher
-    (ohne Umweg über eine Datei) und liefert den Text."""
+    (ohne Umweg über eine Datei) und liefert (Text, no_speech_prob).
+
+    no_speech_prob ist das Maximum über alle Segmente: schlägt eines an, war
+    in der Phrase mit hoher Wahrscheinlichkeit gar keine Sprache."""
     if audio_float32 is None or len(audio_float32) == 0:
-        return ""
+        return "", 1.0
     try:
         model = get_whisper_model()
         result = model.transcribe(
@@ -766,10 +827,12 @@ def transcribe_array(audio_float32):
             fp16=torch.cuda.is_available(),
             verbose=False,
         )
-        return result["text"].strip()
+        segments = result.get("segments") or []
+        no_speech = max((s.get("no_speech_prob", 0.0) for s in segments), default=0.0)
+        return _typer.strip_auto_periods(result["text"].strip()), no_speech
     except Exception as e:
         logger.error(f"Live-Transkription fehlgeschlagen: {e}")
-        return ""
+        return "", 1.0
 
 
 def _flush_live(seg, seg_samples):
@@ -778,11 +841,19 @@ def _flush_live(seg, seg_samples):
         return
     audio = np.concatenate(seg).astype(np.float32)
     with _transcribe_lock:
-        text = transcribe_array(audio)
-    if text:
-        logger.info(f"Live-Phrase ({seg_samples/samplerate:.1f}s) → {text!r}")
-        print(f"📝 {text}")
-        _typer.type_at_cursor(text + " ")
+        text, no_speech = transcribe_array(audio)
+    if not text:
+        return
+    dur = seg_samples / samplerate
+    if no_speech >= LIVE_NO_SPEECH_MAX:
+        logger.info(f"Verworfen ({dur:.1f}s, no_speech={no_speech:.2f}) → {text!r}")
+        return
+    if _is_hallucination(text, no_speech):
+        logger.info(f"Verworfen (Artefakt, {dur:.1f}s, no_speech={no_speech:.2f}) → {text!r}")
+        return
+    logger.info(f"Live-Phrase ({dur:.1f}s, no_speech={no_speech:.2f}) → {text!r}")
+    print(f"📝 {text}")
+    _typer.type_at_cursor(text + " ")
 
 
 def _live_worker():
@@ -856,6 +927,14 @@ def transcribe_and_output(audio_path=None):
             logging.info("No valid transcription generated.")
             return
 
+        # Bestand die ganze Aufnahme nur aus einem Whisper-Stille-Artefakt
+        # ("Untertitel: SWR 2020"), nichts tippen. no_speech ist hier unbekannt
+        # → nur die harten Muster greifen.
+        if _is_hallucination(transcription):
+            logging.info(f"Verworfen (Artefakt) → {transcription!r}")
+            print("No valid transcription found.")
+            return
+
         # Transkription ausgeben und ins aktive Fenster eingeben
         print(f"Transcription: {transcription}")
         logging.info(f"Transcription: {transcription}")
@@ -882,16 +961,16 @@ Bedienung:
   (automatisch)    Stoppt bei Sprechpause > RECORD_SILENCE_STOP s
   Ctrl+C           Programm beenden
 
-Live-Modus (Standard):
-  Während der Aufnahme werden Phrasen an Sprechpausen sofort transkribiert und
-  am Cursor getippt — kein langes Warten am Ende. Die volle Aufnahme wird
-  trotzdem als WAV gesichert. OFFLINE_LIVE=0 → altes Verhalten (alles am Ende).
+Transkription (Standard: klassisch):
+  Die Aufnahme wird beim Stoppen komplett am Stück transkribiert und getippt.
+  OFFLINE_LIVE=1 → Live-Modus: Phrasen werden schon während der Aufnahme an
+  Sprechpausen transkribiert und sofort am Cursor getippt.
 
 Umgebungsvariablen:
   AUDIO_DEVICE          Input-Device Index (überschreibt Auswahl)
   AUDIO_OUTPUT_DEVICE   Output-Device Index (überschreibt Auswahl)
   WHISPER_MODEL         Modell (tiny/base/small/medium/large, Standard: small)
-  OFFLINE_LIVE          1 = live während Aufnahme (Standard), 0 = am Ende
+  OFFLINE_LIVE          0 = alles am Ende (Standard), 1 = live während Aufnahme
   RECORD_SILENCE_STOP   Sprechpause in s bis Auto-Stop, 0 = aus (Standard: 15.0)
   STREAM_SILENCE_RMS    Schwelle Stille-Erkennung (Standard: 0.010)
   STREAM_MIN_SILENCE    Pausenlänge in s zum Phrasen-Ende (Standard: 0.7)

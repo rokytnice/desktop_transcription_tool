@@ -15,6 +15,7 @@
 #   AUDIO_DEVICE          Input-Gerät (Index, überschreibt Auswahl)
 #   AUDIO_OUTPUT_DEVICE   Output-Gerät (Index, überschreibt Auswahl)
 #   WHISPER_MODEL         tiny | base | small | medium | large  (Standard: small)
+#   OFFLINE_LIVE          0 = alles am Ende (Standard), 1 = live während Aufnahme
 #   RECORD_SILENCE_STOP   Sprechpause in s bis Auto-Stop, 0 = aus  (Standard: 15.0)
 #   STREAM_SILENCE_RMS    Schwelle Stille-Erkennung             (Standard: 0.010)
 #

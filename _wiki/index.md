@@ -1,6 +1,6 @@
 # Projekt-Wiki — Desktop Transcription Tool
 
-_Zuletzt aktualisiert: 2026-07-15_
+_Zuletzt aktualisiert: 2026-07-21_
 
 ## Inhalt
 - [service.md](service.md) — Service-Setup & Autostart bei Rechnerstart
@@ -10,15 +10,22 @@ _Zuletzt aktualisiert: 2026-07-15_
 - [troubleshooting.md](troubleshooting.md) — bekannte Probleme, Diagnose, Fix
 
 ## Kurzüberblick
+**Keine automatischen Satzpunkte:** Whisper setzt am Ende jeder erkannten Phrase
+einen Punkt — beim Live-Diktat also nach jeder Sprechpause. `_typer.strip_auto_periods()`
+entfernt Punkte am Wort-/Zeilenende in allen Diktat-Modi (offline, streaming,
+faster_streaming); Punkte mitten im Wort (`1.5`, `z.B.`, `foo.py`) bleiben.
+`AUTO_PERIODS=1` stellt das alte Verhalten wieder her.
+
 Aufnahme → Whisper-Transkription → Text wird an der Cursor-Position getippt,
 ausgelöst per Alt+Alt-Doppeltipp (Wayland/GNOME). Sechs Modi:
-- `run_offline.sh` — Aufnahme + **Live-Pipelining** (Standard): während der
-  Aufnahme transkribiert ein Hintergrund-Worker Phrasen an Sprechpausen (VAD)
-  und tippt sie sofort am Cursor — kein langes Warten am Ende, beim Stoppen ist
-  nur der letzte kurze Rest offen. Die volle Aufnahme wird trotzdem als WAV
-  gesichert. Aufnahme fest 16 kHz mono float32 (whisper-nativ). `OFFLINE_LIVE=0`
-  → altes Verhalten (aufnehmen → stoppen → alles am Stück). Tipp-Backend
-  `_typer.py` (Clipboard nur Fallback). Segment-Tuning teilt sich die
+- `run_offline.sh` — Aufnahme, Transkription **am Ende** (Standard): Alt+Alt
+  stoppt, dann wird die ganze Aufnahme am Stück transkribiert und getippt.
+  Aufnahme fest 16 kHz mono float32 (whisper-nativ), WAV wird gesichert.
+  Tipp-Backend `_typer.py` (Clipboard nur Fallback).
+  **Live-Pipelining** ist opt-in per `OFFLINE_LIVE=1`: ein Hintergrund-Worker
+  transkribiert Phrasen an Sprechpausen (VAD) schon während der Aufnahme und
+  tippt sie sofort. Bewusst nicht Standard — das zerlegt das Diktat in
+  Phrasen-Häppchen (André, 2026-08-14). Segment-Tuning teilt sich die
   `STREAM_MIN_SILENCE`/`STREAM_MIN_PHRASE`/`STREAM_MAX_PHRASE`-Schwellen mit dem
   Streaming-Modus.
   **Pausen-Auto-Stop:** Sprechpause > `RECORD_SILENCE_STOP` s (Standard 15, `0` = aus)
