@@ -1,6 +1,6 @@
 # Troubleshooting
 
-_Zuletzt aktualisiert: 2026-08-15_
+_Zuletzt aktualisiert: 2026-08-29_
 
 ## Transkriptionsqualität schlecht bei hoher System-Last
 
@@ -184,3 +184,41 @@ Service-Stopp-Schleife ab, bevor irgendein `echo` kam. Gleiches Muster mit
 `setup-service.sh`). **Regel:** In diesen Scripts jede Zuweisung aus einem
 Kommando, das legitim ≠ 0 zurückgeben kann (`systemctl is-active`, `pgrep`,
 `grep`), mit `|| true` absichern — sonst stirbt das Script stumm.
+
+## Service "reagiert nicht": Aufnahme läuft, aber es wird nichts getippt
+
+**Symptom:** Alt+Alt startet und stoppt sichtbar (Log: `DOUBLE-TAP DETECTED`,
+`Recording completed: 667200 samples`), danach steht im Log nur
+`Transcription result:` **ohne Text** und `No valid transcription generated.`
+Es wird nichts getippt — sieht aus, als hinge der Service.
+
+**Ursache:** Der Service nahm vom **falschen Mikrofon** auf. Die Unit wurde mit
+`-a` (ein Gerät für Input+Output) gestartet; `select_auto_device()` hat dabei
+`AUDIO_DEVICE` **ignoriert** und stur das System-Default genommen — hier das
+interne Digital-Mic. Dessen Rauschteppich liegt bei RMS ≈ 0,014 (60-Hz-Brumm),
+echte Sprache kommt nicht an. Whisper macht aus 42 s Rauschen einen leeren
+String → nichts zu tippen.
+
+Diagnose an der WAV (`~/.transcription/audio_recording.wav`):
+```bash
+offline/.venv/bin/python - <<'PY'
+import numpy as np, soundfile as sf
+d,r = sf.read('/home/aroc/.transcription/audio_recording.wav', dtype='float32')
+d = d[:,0] if d.ndim>1 else d
+print("RMS/s:", " ".join(f"{np.sqrt((d[i*r:(i+1)*r]**2).mean()):.3f}" for i in range(len(d)//r)))
+PY
+```
+Sprache **moduliert**: Pausen ~0,001, Silben 0,05–0,15. Ein über 40 s konstanter
+Wert (hier durchgehend 0,011–0,016) heißt: nur Rauschen, kein Nutzsignal.
+
+Nebenbefund: dieser Rauschpegel liegt **über** `STREAM_SILENCE_RMS` (0,010) —
+deshalb griff auch der 15-s-Pausen-Auto-Stop nicht.
+
+**Fix:**
+- `select_auto_device()` respektiert jetzt `AUDIO_DEVICE`/`AUDIO_OUTPUT_DEVICE`
+  und übersteuert damit die Auto-Wahl; je Richtung einzeln (das Jabra ist als
+  ALSA-hw-Gerät reiner Input, der Output bleibt beim Default).
+- `AUDIO_DEVICE` akzeptiert jetzt ein **Namensfragment** statt nur einen Index
+  (`resolve_device()`). Indizes verschieben sich beim Umstecken/Neustart —
+  in die Unit gehört `Jabra`, nicht `7`.
+- Service entsprechend eingerichtet: `./setup-service.sh offline --device Jabra`.

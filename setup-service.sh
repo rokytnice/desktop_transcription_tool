@@ -13,7 +13,8 @@
 #
 # OPTIONEN
 #   --model NAME        Whisper-Modell (tiny|base|small|medium|large)  (Standard: small)
-#   --device IDX        Audio-Gerät-Index (Input+Output)  (Standard: -a / Auto)
+#   --device SPEC       Audio-Gerät: Index ODER Namensfragment, z.B. "Jabra"
+#                       (Input+Output)  (Standard: -a / Auto)
 #   --min-silence S     Pause in s, die eine Phrase beendet     (Standard: 0.7)
 #   --silence-rms X     Stille-Schwelle (RMS)                   (Standard: 0.010)
 #   --max-phrase S      Zwangs-Flush langer Phrasen in s        (Standard: 15)

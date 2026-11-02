@@ -132,15 +132,33 @@ device_index = None  # Input device, selected at startup
 output_device_index = None  # Output device, selected at startup
 
 # Auto-detect best audio device if AUDIO_DEVICE env var is set
+def resolve_device(spec, want_input=True):
+    """Löst eine Geräteangabe zu einem Index auf.
+
+    Zahl = Index. Alles andere = Namensfragment (case-insensitive), z.B.
+    AUDIO_DEVICE=Jabra. Namen sind stabil, Indizes NICHT: sie verschieben sich,
+    sobald ein USB-Gerät an-/absteckt oder der Rechner neu startet — deshalb
+    gehört in die Service-Unit der Name, nicht die Zahl."""
+    if spec is None or spec == '':
+        return None
+    try:
+        return int(spec)
+    except ValueError:
+        pass
+    key = 'max_input_channels' if want_input else 'max_output_channels'
+    needle = str(spec).lower()
+    for idx, dev in enumerate(sd.query_devices()):
+        if dev[key] > 0 and needle in dev['name'].lower():
+            logger.info(f"Gerät '{spec}' aufgelöst → #{idx} {dev['name']}")
+            return idx
+    richtung = 'Input' if want_input else 'Output'
+    logger.warning(f"Kein {richtung}-Gerät passt auf '{spec}' — {richtung} bleibt beim Default")
+    return None
+
+
 def get_audio_device_from_env():
     """Get audio device from environment variable or return None"""
-    env_device = os.environ.get('AUDIO_DEVICE')
-    if env_device:
-        try:
-            return int(env_device)
-        except ValueError:
-            return None
-    return None
+    return resolve_device(os.environ.get('AUDIO_DEVICE'), want_input=True)
 
 # Logger erstellen
 logger = logging.getLogger()
@@ -210,7 +228,9 @@ def select_output_device(interactive=False):
     env_device = os.environ.get('AUDIO_OUTPUT_DEVICE')
     if env_device:
         try:
-            output_device_index = int(env_device)
+            output_device_index = resolve_device(env_device, want_input=False)
+            if output_device_index is None:
+                raise ValueError(f"kein Output-Gerät passt auf {env_device!r}")
             dev_info = sd.query_devices(output_device_index)
             print(f"✓ Using output from environment: {dev_info['name']}\n")
             return output_device_index
@@ -263,11 +283,31 @@ def select_output_device(interactive=False):
 
 # Select single device for both input and output
 def select_auto_device(interactive=False):
-    """Select ONE device for both input and output"""
+    """Select ONE device for both input and output.
+
+    AUDIO_DEVICE/AUDIO_OUTPUT_DEVICE haben Vorrang: eine bewusst gesetzte
+    Geräteangabe muss die Auto-Wahl schlagen — sonst landet der Service still
+    auf dem Default-Mikrofon, obwohl in der Unit ein Gerät steht."""
     global device_index, output_device_index
 
     devices_list = []
     all_devices = sd.query_devices()
+
+    env_in = resolve_device(os.environ.get('AUDIO_DEVICE'), want_input=True)
+    env_out = resolve_device(os.environ.get('AUDIO_OUTPUT_DEVICE'), want_input=False)
+    if env_in is not None or env_out is not None:
+        # Nur die gesetzte Richtung übernehmen, die andere bleibt beim
+        # System-Default (das Jabra z.B. ist als ALSA-hw-Gerät reiner Input).
+        device_index = env_in if env_in is not None else sd.default.device[0]
+        output_device_index = env_out if env_out is not None else sd.default.device[1]
+        logger.info(
+            f"Gerät aus Env: Input #{device_index} "
+            f"({all_devices[device_index]['name']}), Output #{output_device_index} "
+            f"({all_devices[output_device_index]['name']})"
+        )
+        print(f"✓ Input: {all_devices[device_index]['name']} | "
+              f"Output: {all_devices[output_device_index]['name']}\n")
+        return device_index
 
     for idx, device in enumerate(all_devices):
         if device['max_input_channels'] > 0 and device['max_output_channels'] > 0:
@@ -967,8 +1007,8 @@ Transkription (Standard: klassisch):
   Sprechpausen transkribiert und sofort am Cursor getippt.
 
 Umgebungsvariablen:
-  AUDIO_DEVICE          Input-Device Index (überschreibt Auswahl)
-  AUDIO_OUTPUT_DEVICE   Output-Device Index (überschreibt Auswahl)
+  AUDIO_DEVICE          Input-Gerät: Index ODER Namensfragment (z.B. Jabra)
+  AUDIO_OUTPUT_DEVICE   Output-Gerät: Index ODER Namensfragment
   WHISPER_MODEL         Modell (tiny/base/small/medium/large, Standard: small)
   OFFLINE_LIVE          0 = alles am Ende (Standard), 1 = live während Aufnahme
   RECORD_SILENCE_STOP   Sprechpause in s bis Auto-Stop, 0 = aus (Standard: 15.0)
